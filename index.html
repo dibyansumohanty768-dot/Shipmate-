@@ -414,10 +414,36 @@ const vehicles=[
   {id:"truck", icon:"🚛", name:"Truck",       desc:"House moves & bulk cargo", cap:"Up to 5,000 kg",price:"$80"},
 ];
 
-// Fake order database — real app would fetch from server
+// ── SUPABASE CONFIG ── Replace these with your actual project values ──
+const SUPABASE_URL     = "https://zsbzyokhsyrvuwduiifq.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzYnp5b2toc3lydnV3ZHVpaWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMDI1NDIsImV4cCI6MjA5MjU3ODU0Mn0.J3gPiP_r1k0HZA6zkeHJ854xr5dxU2NVb94y7_bGsFU";
+
+// Helper: call Supabase REST API
+async function sbFetch(path, method="GET", body=null){
+  const opts={
+    method,
+    headers:{
+      "Content-Type":"application/json",
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization":"Bearer "+SUPABASE_ANON_KEY,
+      "Prefer": method==="POST"?"return=representation":"",
+    }
+  };
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(SUPABASE_URL+path, opts);
+  if(!res.ok){
+    const err=await res.text();
+    throw new Error("Supabase error ("+res.status+"): "+err);
+  }
+  // 204 No Content has no body
+  if(res.status===204) return null;
+  return res.json();
+}
+
+// Demo orders kept only for local tracking page fallback
 const fakeOrders={
-  "SWDEMO1":{ vehicle:"Car 🚗", status:"transit", pickupAddr:"42 Oak Avenue, Brooklyn, NY", deliveryAddr:"100 5th Ave, Manhattan, NY", sender:"John Smith", receiver:"Mary Johnson", weight:"5 kg", notes:"Handle with care", date:"Apr 23, 2026", timeline:[{done:true,label:"Order Placed",time:"8:00 AM"},{done:true,label:"Picked Up",time:"9:15 AM"},{done:true,label:"In Transit",time:"9:30 AM"},{done:false,label:"Out for Delivery",time:""},{done:false,label:"Delivered",time:""}]},
-  "SWDEMO2":{ vehicle:"Bike 🏍️", status:"delivered", pickupAddr:"15 Pine Street, Queens, NY", deliveryAddr:"88 River Road, Bronx, NY", sender:"Alice Brown", receiver:"Bob White", weight:"2 kg", notes:"", date:"Apr 22, 2026", timeline:[{done:true,label:"Order Placed",time:"10:00 AM"},{done:true,label:"Picked Up",time:"10:20 AM"},{done:true,label:"In Transit",time:"10:35 AM"},{done:true,label:"Out for Delivery",time:"11:00 AM"},{done:true,label:"Delivered",time:"11:18 AM"}]},
+  "SWDEMO1":{ vehicle:"Car 🚗", status:"transit", pickup_addr:"42 Oak Avenue, Brooklyn, NY", delivery_addr:"100 5th Ave, Manhattan, NY", sender:"John Smith", receiver:"Mary Johnson", weight:"5 kg", notes:"Handle with care", date:"Apr 23, 2026", timeline:[{done:true,label:"Order Placed",time:"8:00 AM"},{done:true,label:"Picked Up",time:"9:15 AM"},{done:true,label:"In Transit",time:"9:30 AM"},{done:false,label:"Out for Delivery",time:""},{done:false,label:"Delivered",time:""}]},
+  "SWDEMO2":{ vehicle:"Bike 🏍️", status:"delivered", pickup_addr:"15 Pine Street, Queens, NY", delivery_addr:"88 River Road, Bronx, NY", sender:"Alice Brown", receiver:"Bob White", weight:"2 kg", notes:"", date:"Apr 22, 2026", timeline:[{done:true,label:"Order Placed",time:"10:00 AM"},{done:true,label:"Picked Up",time:"10:20 AM"},{done:true,label:"In Transit",time:"10:35 AM"},{done:true,label:"Out for Delivery",time:"11:00 AM"},{done:true,label:"Delivered",time:"11:18 AM"}]},
 };
 
 // State
@@ -481,7 +507,7 @@ function loadProfile(){
   }
   ordersWrap.innerHTML=keys.reverse().map(k=>{
     const o=ordersDB[k];
-    const st={pending:"🟡 Pending",transit:"🔵 In Transit",delivered:"🟢 Delivered"}[o.status]||"🟡 Pending";
+    const st={pending:"🟡 Pending",transit:"🔵 In Transit",out_for_delivery:"🔵 Out for Delivery",delivered:"🟢 Delivered"}[o.status]||"🟡 Pending";
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F3F4F6;">
       <div>
         <div style="font-size:13px;font-weight:700;color:#111;">${k}</div>
@@ -683,32 +709,71 @@ function goToStep4(){
   renderSheet(4);
 }
 
-function confirmBooking(){
+async function confirmBooking(){
   const desc=$("b_desc")?$("b_desc").value.trim():"";
   const itype=$("b_itemtype")?$("b_itemtype").value:"";
   if(!itype||!desc){alert("Please select item type and describe what you're shipping.");return;}
 
   const tid=genId();
-  const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
-  const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
+  const pickup_addr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
+  const delivery_addr= bookingMyRole==="delivery"? userAddr : bookingOther;
 
-  // Save to our local "DB" so it can be tracked
+  const payload={
+    tracking_id:  tid,
+    vehicle:      activeVehicle.name+" "+activeVehicle.icon,
+    status:       "pending",
+    pickup_addr,
+    delivery_addr,
+    sender:       bookingMyRole==="pickup"   ? bookingDetails.name : (bookingDetails.otherName||"—"),
+    receiver:     bookingMyRole==="delivery" ? bookingDetails.name : (bookingDetails.otherName||"—"),
+    sender_phone: bookingMyRole==="pickup"   ? bookingDetails.phone : (bookingDetails.otherPhone||""),
+    receiver_phone:bookingMyRole==="delivery"? bookingDetails.phone : (bookingDetails.otherPhone||""),
+    booker_name:  bookingDetails.name,
+    booker_phone: bookingDetails.phone,
+    booker_email: bookingDetails.email||"",
+    preferred_date: bookingDetails.date,
+    preferred_time: bookingDetails.time||"Any time",
+    item_type:    itype,
+    description:  desc,
+    weight:       $("b_weight")?$("b_weight").value||"Not specified":"Not specified",
+    quantity:     $("b_qty")?$("b_qty").value.trim():"",
+    declared_value: $("b_value")?$("b_value").value:"",
+    notes:        $("b_special")?$("b_special").value.trim():"",
+    created_at:   new Date().toISOString(),
+  };
+
+  // ── Disable confirm button to prevent double-submit ──
+  const confirmBtn=document.querySelector('button[onclick="confirmBooking()"]');
+  if(confirmBtn){confirmBtn.disabled=true;confirmBtn.textContent="Booking…";}
+
+  try {
+    // ── INSERT INTO SUPABASE ──
+    await sbFetch("/rest/v1/orders","POST", payload);
+  } catch(err){
+    console.error("Booking failed:", err);
+    alert("Booking failed. Please check your connection and try again.\n\nDetails: "+err.message);
+    if(confirmBtn){confirmBtn.disabled=false;confirmBtn.textContent="Confirm Booking →";}
+    return;
+  }
+
+  // ── Also keep in local ordersDB so tracking works in the same session ──
   ordersDB[tid]={
-    vehicle: activeVehicle.name+" "+activeVehicle.icon,
-    status:"pending",
-    pickupAddr, deliveryAddr,
-    sender: bookingMyRole==="pickup" ? bookingDetails.name : (bookingDetails.otherName||"—"),
-    receiver: bookingMyRole==="delivery" ? bookingDetails.name : (bookingDetails.otherName||"—"),
-    weight: $("b_weight")?$("b_weight").value||"Not specified":"",
-    notes: $("b_special")?$("b_special").value.trim():"",
-    date: bookingDetails.date,
-    desc: desc,
+    vehicle:      payload.vehicle,
+    status:       "pending",
+    pickup_addr,
+    delivery_addr,
+    sender:       payload.sender,
+    receiver:     payload.receiver,
+    weight:       payload.weight,
+    notes:        payload.notes,
+    date:         payload.preferred_date,
+    desc:         payload.description,
     timeline:[
-      {done:true, label:"Order Placed",   time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
-      {done:false,label:"Picked Up",      time:""},
-      {done:false,label:"In Transit",     time:""},
-      {done:false,label:"Out for Delivery",time:""},
-      {done:false,label:"Delivered",      time:""},
+      {done:true, label:"Order Placed",     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
+      {done:false,label:"Picked Up",        time:""},
+      {done:false,label:"In Transit",       time:""},
+      {done:false,label:"Out for Delivery", time:""},
+      {done:false,label:"Delivered",        time:""},
     ]
   };
 
@@ -730,7 +795,7 @@ function resetBooking(){
 }
 
 // ── TRACKING ──────────────────────────────────────────────────────
-function trackOrder(){
+async function trackOrder(){
   const raw=$("trackInput").value.trim().toUpperCase();
   const result=$("trackResult");
   const notFound=$("trackNotFound");
@@ -738,8 +803,46 @@ function trackOrder(){
   notFound.classList.add("hidden");
   if(!raw){alert("Please enter a Tracking ID.");return;}
 
-  const order=ordersDB[raw];
+  // Show loading state
+  result.innerHTML=`<div style="text-align:center;padding:24px;font-size:14px;color:#6B7280;">🔍 Looking up your order…</div>`;
+  result.classList.remove("hidden");
+
+  let order=null;
+
+  // 1. Try Supabase first
+  try{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+encodeURIComponent(raw)+"&select=*");
+    if(rows && rows.length>0){
+      const r=rows[0];
+      // Normalise Supabase row → local shape expected by the render block below
+      order={
+        vehicle:       r.vehicle,
+        status:        r.status||"pending",
+        pickup_addr:   r.pickup_addr,
+        delivery_addr: r.delivery_addr,
+        sender:        r.sender,
+        receiver:      r.receiver,
+        weight:        r.weight||"",
+        notes:         r.notes||"",
+        date:          r.preferred_date||r.created_at?.slice(0,10)||"",
+        timeline:[
+          {done:true, label:"Order Placed",      time: r.created_at ? new Date(r.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):""},
+          {done:r.status!=="pending",            label:"Picked Up",         time:""},
+          {done:r.status==="transit"||r.status==="delivered", label:"In Transit",time:""},
+          {done:r.status==="out_for_delivery"||r.status==="delivered", label:"Out for Delivery",time:""},
+          {done:r.status==="delivered",          label:"Delivered",         time:""},
+        ]
+      };
+    }
+  }catch(err){
+    console.warn("Supabase lookup failed, falling back to local DB:", err);
+  }
+
+  // 2. Fall back to local ordersDB (demo orders + same-session bookings)
+  if(!order) order=ordersDB[raw]||null;
+
   if(!order){
+    result.classList.add("hidden");
     notFound.classList.remove("hidden");
     return;
   }
@@ -747,6 +850,7 @@ function trackOrder(){
   const statusMap={
     pending:{label:"⏳ Pending",cls:"ts-pending"},
     transit:{label:"🚚 In Transit",cls:"ts-transit"},
+    out_for_delivery:{label:"🚚 Out for Delivery",cls:"ts-transit"},
     delivered:{label:"✅ Delivered",cls:"ts-delivered"},
   };
   const st=statusMap[order.status]||statusMap.pending;
@@ -764,6 +868,9 @@ function trackOrder(){
     </div>`;
   }).join("");
 
+  const pickupShow  = order.pickup_addr  || order.pickupAddr  || "—";
+  const deliveryShow= order.delivery_addr|| order.deliveryAddr|| "—";
+
   result.innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
       <div style="font-size:16px;font-weight:800;color:#000;letter-spacing:1px">${raw}</div>
@@ -771,8 +878,8 @@ function trackOrder(){
     </div>
     <div style="font-size:13px;color:#6B7280;margin-bottom:18px;">${order.vehicle} &nbsp;·&nbsp; Booked ${order.date||"today"}</div>
     <div class="track-info-grid">
-      <div class="tinfo-card"><div class="tinfo-label">📦 Pickup</div><div class="tinfo-val">${order.pickupAddr}</div></div>
-      <div class="tinfo-card"><div class="tinfo-label">🏠 Delivery</div><div class="tinfo-val">${order.deliveryAddr}</div></div>
+      <div class="tinfo-card"><div class="tinfo-label">📦 Pickup</div><div class="tinfo-val">${pickupShow}</div></div>
+      <div class="tinfo-card"><div class="tinfo-label">🏠 Delivery</div><div class="tinfo-val">${deliveryShow}</div></div>
       <div class="tinfo-card"><div class="tinfo-label">👤 Sender</div><div class="tinfo-val">${order.sender||"—"}</div></div>
       <div class="tinfo-card"><div class="tinfo-label">👤 Receiver</div><div class="tinfo-val">${order.receiver||"—"}</div></div>
       ${order.weight?`<div class="tinfo-card"><div class="tinfo-label">⚖️ Weight</div><div class="tinfo-val">${order.weight}</div></div>`:""}
