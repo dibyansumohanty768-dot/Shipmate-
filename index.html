@@ -5,9 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Shipmate</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding-bottom:80px;}
+
+/* ── MAP ── */
+.map-box{width:100%;height:220px;border-radius:12px;overflow:hidden;margin-top:12px;border:1.5px solid #E5E7EB;}
+.map-box-track{width:100%;height:260px;border-radius:12px;overflow:hidden;margin-top:14px;border:1.5px solid #E5E7EB;}
+.autocomplete-wrap{position:relative;}
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-radius:10px;z-index:999;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.10);}
+.autocomplete-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #F3F4F6;}
+.autocomplete-item:hover{background:#F0F4FF;}
 
 /* ── TOP NAV ── */
 .topnav{background:#000;height:56px;display:flex;align-items:center;justify-between;padding:0 24px;position:sticky;top:0;z-index:100;justify-content:space-between;}
@@ -34,6 +44,1305 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
 .tbtn.active .tbar{background:#2563EB;}
 .tbar{height:3px;width:28px;border-radius:2px;background:transparent;margin-top:2px;transition:background 0.18s;}
 
+/* ── OVERLAY ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;}
+.overlay.hidden{display:none;}
+
+/* ── ONBOARDING ── */
+.ob-card{background:#fff;border-radius:20px;padding:22px 18px;width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,0.2);animation:popIn 0.28s ease both;}
+@keyframes popIn{from{opacity:0;transform:scale(0.93) translateY(10px);}to{opacity:1;transform:scale(1) translateY(0);}}
+.ob-icon{width:38px;height:38px;background:#EFF6FF;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:10px;}
+.ob-title{font-size:18px;font-weight:800;color:#000;margin-bottom:3px;letter-spacing:-0.5px;}
+.ob-sub{font-size:12px;color:#6B7280;line-height:1.45;margin-bottom:14px;}
+
+/* ── BOOKING SHEET ── */
+.sheet{background:#fff;border-radius:22px;padding:28px;width:100%;max-width:500px;box-shadow:0 28px 80px rgba(0,0,0,0.22);animation:popIn 0.25s ease both;max-height:92vh;overflow-y:auto;}
+.sheet-vtag{display:inline-flex;align-items:center;gap:8px;background:#F3F4F6;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;color:#111;margin-bottom:18px;}
+.sheet-q{font-size:19px;font-weight:800;color:#000;letter-spacing:-0.4px;margin-bottom:5px;line-height:1.3;}
+.sheet-hint{font-size:13px;color:#6B7280;margin-bottom:18px;line-height:1.5;}
+.step-dots{display:flex;gap:6px;margin-bottom:20px;}
+.sdot{width:8px;height:8px;border-radius:50%;background:#E5E7EB;transition:background 0.2s;}
+.sdot.active{background:#2563EB;}
+
+/* ── CHOICES ── */
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.choice{background:#F9FAFB;border:2px solid #E5E7EB;border-radius:14px;padding:16px 12px;cursor:pointer;text-align:left;transition:all 0.18s;width:100%;font-family:'Plus Jakarta Sans',sans-serif;}
+.choice:hover{border-color:#D1D5DB;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.choice.sel{border-color:#2563EB;background:#EFF6FF;}
+.choice-emoji{font-size:24px;display:block;margin-bottom:8px;}
+.choice-label{font-size:14px;font-weight:700;color:#000;margin-bottom:2px;display:block;}
+.choice-hint{font-size:11.5px;color:#6B7280;line-height:1.4;display:block;}
+
+/* ── INPUTS ── */
+.flabel{font-size:12px;font-weight:700;color:#374151;margin-bottom:6px;display:block;}
+.finput,.fselect,.ftarea{width:100%;border:1.5px solid #E5E7EB;border-radius:10px;padding:11px 13px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;color:#111;outline:none;background:#fff;transition:border-color 0.15s,box-shadow 0.15s;appearance:none;-webkit-appearance:none;}
+.finput:focus,.fselect:focus,.ftarea:focus{border-color:#2563EB;box-shadow:0 0 0 3px rgba(37,99,235,0.12);}
+.finput::placeholder,.ftarea::placeholder{color:#9CA3AF;}
+.finput.hi{border-color:#2563EB;background:#EFF6FF;}
+.ftarea{resize:vertical;min-height:72px;}
+.fselect{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:36px;cursor:pointer;}
+.fselect option{background:#fff;}
+.fgroup{margin-bottom:10px;}
+.ob-card .fgroup{margin-bottom:8px;}
+.ob-card .finput{padding:9px 11px;font-size:13px;}
+.ob-card .btn-black{padding:11px;font-size:14px;}
+.ob-card .btn-link{margin-top:6px;font-size:12px;}
+.col2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.col3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+
+/* ── SUMMARY ── */
+.summary{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;font-size:13px;color:#1E40AF;line-height:1.8;margin-bottom:14px;}
+
+/* ── BUTTONS ── */
+.btn-black{width:100%;padding:13px;background:#000;color:#fff;border:none;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:all 0.18s;display:block;}
+.btn-black:hover{background:#111;box-shadow:0 6px 20px rgba(0,0,0,0.18);transform:translateY(-1px);}
+.btn-blue{width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;cursor:pointer;transition:all 0.18s;display:block;}
+.btn-blue:hover{background:#1D4ED8;transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,0.3);}
+.btn-ghost{width:100%;padding:12px;background:transparent;color:#374151;border:1.5px solid #D1D5DB;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:14px;cursor:pointer;transition:all 0.18s;display:block;margin-top:8px;}
+.btn-ghost:hover{border-color:#9CA3AF;background:#F9FAFB;}
+.btn-link{background:none;border:none;color:#6B7280;font-size:13px;font-family:'Plus Jakarta Sans',sans-serif;cursor:pointer;text-decoration:underline;margin-top:10px;display:block;text-align:center;width:100%;}
+.btn-link:hover{color:#111;}
+.mt8{margin-top:8px;}
+
+/* ── PAGES ── */
+.page{max-width:860px;margin:0 auto;padding:28px 20px 24px;}
+.page.hidden{display:none;}
+
+/* ── HERO ── */
+.hero{background:#000;border-radius:18px;padding:32px 28px;margin-bottom:24px;position:relative;overflow:hidden;}
+.hero-glow{position:absolute;top:-40px;right:-40px;width:220px;height:220px;background:radial-gradient(circle,rgba(37,99,235,0.4) 0%,transparent 70%);pointer-events:none;}
+.hero h1{font-size:28px;font-weight:800;color:#fff;letter-spacing:-1px;line-height:1.2;margin-bottom:8px;position:relative;}
+.hero h1 span{color:#2563EB;}
+.hero p{font-size:13.5px;color:rgba(255,255,255,0.5);line-height:1.6;position:relative;max-width:380px;}
+.hero-addr{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.7);margin-top:14px;position:relative;}
+
+/* ── SECTION LABEL ── */
+.slabel{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#9CA3AF;margin-bottom:12px;}
+
+/* ── VEHICLE GRID ── */
+.vgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.vcard{background:#fff;border:2px solid #E5E7EB;border-radius:14px;padding:18px 14px;cursor:pointer;transition:all 0.2s;position:relative;}
+.vcard:hover{border-color:#2563EB;box-shadow:0 4px 16px rgba(37,99,235,0.12);transform:translateY(-2px);}
+.vcard-icon{font-size:28px;display:block;margin-bottom:10px;}
+.vcard-name{font-size:14px;font-weight:700;color:#111;margin-bottom:3px;}
+.vcard-desc{font-size:11.5px;color:#6B7280;line-height:1.4;margin-bottom:8px;}
+.vcard-cap{font-size:11px;font-weight:600;color:#9CA3AF;margin-bottom:8px;}
+.vcard-price{font-size:16px;font-weight:800;color:#111;}
+.vcard-price span{font-size:11px;font-weight:500;color:#9CA3AF;}
+.vcard-tap{font-size:11px;font-weight:600;color:#2563EB;margin-top:8px;}
+.vcard-bar{position:absolute;bottom:0;left:0;right:0;height:3px;border-radius:0 0 12px 12px;background:#2563EB;opacity:0;transition:opacity 0.2s;}
+.vcard:hover .vcard-bar{opacity:1;}
+
+/* ── TRACK PAGE ── */
+.track-hero{background:#000;border-radius:18px;padding:32px 28px;margin-bottom:24px;position:relative;overflow:hidden;}
+.track-glow{position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(37,99,235,0.4) 0%,transparent 70%);pointer-events:none;}
+.track-hero h2{font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.8px;margin-bottom:8px;position:relative;}
+.track-hero h2 span{color:#2563EB;}
+.track-hero p{font-size:13.5px;color:rgba(255,255,255,0.5);line-height:1.6;position:relative;}
+.track-input-wrap{background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:20px;}
+.track-row{display:flex;gap:10px;}
+.track-row .finput{border-radius:10px;font-size:15px;font-weight:600;letter-spacing:1px;text-transform:uppercase;}
+.track-row .btn-blue{width:auto;padding:11px 22px;flex-shrink:0;border-radius:10px;margin-top:0;}
+.track-result{background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,0.06);animation:popIn 0.25s ease both;}
+.track-result.hidden{display:none;}
+.track-status-badge{display:inline-flex;align-items:center;gap:8px;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;margin-bottom:18px;}
+.ts-pending{background:#FEF3C7;color:#92400E;}
+.ts-transit{background:#DBEAFE;color:#1E40AF;}
+.ts-delivered{background:#D1FAE5;color:#065F46;}
+.track-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.tinfo-card{background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px;}
+.tinfo-label{font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.tinfo-val{font-size:13.5px;font-weight:600;color:#111;line-height:1.4;}
+.track-timeline{margin-top:16px;}
+.tl-title{font-size:13px;font-weight:700;color:#374151;margin-bottom:12px;}
+.tl-item{display:flex;gap:12px;margin-bottom:12px;}
+.tl-dot-wrap{display:flex;flex-direction:column;align-items:center;gap:0;}
+.tl-dot{width:12px;height:12px;border-radius:50%;background:#E5E7EB;flex-shrink:0;margin-top:2px;}
+.tl-dot.done{background:#2563EB;}
+.tl-dot.current{background:#2563EB;box-shadow:0 0 0 3px rgba(37,99,235,0.2);}
+.tl-line{width:2px;flex:1;background:#E5E7EB;min-height:16px;}
+.tl-line.done{background:#2563EB;}
+.tl-text{font-size:13px;color:#6B7280;line-height:1.5;}
+.tl-text strong{color:#111;font-weight:600;}
+.track-not-found{background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:20px;text-align:center;color:#991B1B;font-size:14px;font-weight:600;}
+.track-not-found .nf-icon{font-size:32px;margin-bottom:8px;}
+
+/* ── SUCCESS ── */
+.success-wrap{text-align:center;padding:40px 20px;max-width:420px;margin:0 auto;}
+.success-wrap.hidden{display:none;}
+.s-circle{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 22px;}
+.success-wrap h2{font-size:26px;font-weight:800;color:#000;letter-spacing:-0.5px;margin-bottom:8px;}
+.success-wrap p{font-size:14px;color:#6B7280;line-height:1.6;}
+.track-box{background:#000;color:#fff;border-radius:12px;padding:14px 28px;font-size:20px;font-weight:800;letter-spacing:3px;margin:18px auto;display:inline-block;}
+.track-note{font-size:12px;color:#9CA3AF;}
+
+/* ── PARTNER ── */
+.partner-hero{background:#000;border-radius:18px;padding:32px 28px;margin-bottom:24px;position:relative;overflow:hidden;}
+.partner-glow{position:absolute;bottom:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(37,99,235,0.35) 0%,transparent 70%);pointer-events:none;}
+.partner-hero h2{font-size:26px;font-weight:800;color:#fff;letter-spacing:-0.8px;margin-bottom:8px;position:relative;}
+.partner-hero h2 span{color:#2563EB;}
+.partner-hero p{font-size:13.5px;color:rgba(255,255,255,0.5);max-width:380px;line-height:1.6;position:relative;}
+.perks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;}
+.perk{background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:18px 14px;}
+.perk-icon{font-size:22px;margin-bottom:8px;}
+.perk-title{font-size:13px;font-weight:700;color:#000;margin-bottom:4px;}
+.perk-desc{font-size:12px;color:#6B7280;line-height:1.5;}
+.form-section{background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:24px;margin-bottom:14px;}
+.fs-row{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #F3F4F6;}
+.step-badge{width:28px;height:28px;background:#000;color:#fff;border-radius:8px;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.fs-title{font-size:15px;font-weight:800;color:#000;margin-bottom:2px;}
+.fs-sub{font-size:12.5px;color:#6B7280;}
+.privacy{display:flex;align-items:center;gap:8px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:10px 12px;font-size:12px;color:#6B7280;margin-top:8px;}
+
+@media(max-width:640px){
+  .vgrid{grid-template-columns:1fr 1fr;}
+  .perks{grid-template-columns:1fr;}
+  .col2,.col3{grid-template-columns:1fr;}
+  .choices{grid-template-columns:1fr 1fr;}
+  .track-info-grid{grid-template-columns:1fr;}
+  .track-row{flex-direction:column;}
+  .track-row .btn-blue{width:100%;margin-top:0;}
+  .page{padding:20px 14px 20px;}
+  .hero,.partner-hero,.track-hero{padding:24px 18px;border-radius:14px;}
+  .sheet{padding:22px 18px;border-radius:20px;}
+  .ob-card{padding:28px 20px;}
+}
+@media(max-width:380px){
+  .vgrid{grid-template-columns:1fr;}
+  .choices{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ONBOARDING -->
+<div class="overlay" id="onboardingOverlay">
+  <div class="ob-card">
+
+    <!-- STEP 1: Phone -->
+    <div id="ob_step1">
+      <div class="ob-icon">📱</div>
+      <div class="ob-title">Welcome to Shipmate</div>
+      <div class="ob-sub">Enter your phone number to get started. We'll autofill your details if you've used us before.</div>
+      <div class="fgroup">
+        <label class="flabel">Phone Number *</label>
+        <input class="finput" id="ob_phone" placeholder="e.g. +91 98765 43210" type="tel"/>
+      </div>
+      <button class="btn-black mt8" onclick="checkPhone()">Continue →</button>
+    </div>
+
+    <!-- STEP 2: Details -->
+    <div id="ob_step2" style="display:none">
+      <div class="ob-icon">📍</div>
+      <div class="ob-title">Your Details</div>
+      <div class="ob-sub">We save this so you don't have to type it every time you book.</div>
+      <div class="fgroup">
+        <label class="flabel">Full Name *</label>
+        <input class="finput" id="ob_name" placeholder="e.g. Rahul Sharma"/>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Email</label>
+        <input class="finput" id="ob_email" type="email" placeholder="you@email.com"/>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Street Address *</label>
+        <div class="autocomplete-wrap">
+          <input class="finput" id="ob_street" placeholder="e.g. 42 Main Street, Apt 3B" oninput="addrAutocomplete(this,'ob_city','ob_state','ob_zip','ob_country')"/>
+          <div class="autocomplete-list" id="ob_street_list" style="display:none"></div>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup">
+          <label class="flabel">City *</label>
+          <input class="finput" id="ob_city" placeholder="e.g. Mumbai"/>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">State *</label>
+          <input class="finput" id="ob_state" placeholder="e.g. Maharashtra"/>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup">
+          <label class="flabel">PIN Code *</label>
+          <input class="finput" id="ob_zip" placeholder="e.g. 752106"/>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Country</label>
+          <input class="finput" id="ob_country" placeholder="e.g. India"/>
+        </div>
+      </div>
+      <button class="btn-black mt8" onclick="saveAddress()">Save & Continue →</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOOKING SHEET -->
+<div class="overlay hidden" id="bookingOverlay">
+  <div class="sheet" id="bookingSheet"></div>
+</div>
+
+<!-- TOP NAV -->
+<nav class="topnav">
+  <div class="nav-logo">Ship<span>mate</span></div>
+  <div class="nav-right" id="navAddr"></div>
+</nav>
+
+<!-- ── BOOK PAGE ── -->
+<div class="page" id="page-book">
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <h1>Ship <span>Anything</span>,<br>Anywhere</h1>
+    <p>Bikes, cars, or trucks — we deliver anything from anywhere to anywhere, fast.</p>
+    <div class="hero-addr">📍 &nbsp;<span id="heroAddr"></span></div>
+  </div>
+  <div class="slabel" id="vgridLabel">Tap a vehicle to start booking</div>
+  <div class="vgrid" id="vehicleGrid"></div>
+  <div class="success-wrap hidden" id="bookSuccess">
+    <div class="s-circle" style="background:#F0FDF4;border:2px solid #86EFAC">✅</div>
+    <h2>Booking Confirmed!</h2>
+    <p id="successMsg"></p>
+    <div class="track-box" id="trackId"></div>
+    <p class="track-note">Save this Tracking ID to follow your order</p>
+    <button onclick="toggleMap('successMap','successMapBtn',initSuccessMap)" id="successMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Route Map</button>
+    <div id="successMap" class="map-box" style="display:none;"></div>
+    <button class="btn-ghost" style="max-width:260px;margin:16px auto 0" onclick="resetBooking()">← Book Another</button>
+  </div>
+</div>
+
+<!-- ── PARTNER PAGE ── -->
+<div class="page hidden" id="page-partner">
+  <div class="partner-hero">
+    <div class="partner-glow"></div>
+    <h2>Drive. Deliver.<br><span>Earn More.</span></h2>
+    <p>Use your vehicle to earn on your own schedule. Join partners across 50+ cities.</p>
+  </div>
+  <div class="slabel">Why join us</div>
+  <div class="perks">
+    <div class="perk"><div class="perk-icon">💰</div><div class="perk-title">Great Earnings</div><div class="perk-desc">Top drivers earn $800–$2,000/month on their schedule.</div></div>
+    <div class="perk"><div class="perk-icon">⏰</div><div class="perk-title">Flexible Hours</div><div class="perk-desc">Accept or skip any job. Work when it suits you.</div></div>
+    <div class="perk"><div class="perk-icon">📲</div><div class="perk-title">Simple App</div><div class="perk-desc">Easy navigation, job alerts, and weekly payouts.</div></div>
+  </div>
+  <div class="success-wrap hidden" id="partnerSuccess">
+    <div class="s-circle" style="background:#EFF6FF;border:2px solid #BFDBFE">🤝</div>
+    <h2>Application Sent!</h2>
+    <p>Our team will contact you within <strong>24–48 hours</strong> to complete onboarding.</p>
+    <div class="track-box" style="background:#2563EB" id="partnerRef"></div>
+    <p class="track-note">Your reference number</p>
+    <button class="btn-ghost" style="max-width:240px;margin:16px auto 0" onclick="resetPartner()">← Back</button>
+  </div>
+  <div id="partnerFormWrap">
+    <div class="slabel">Registration</div>
+    <!-- Step 1 -->
+    <div class="form-section">
+      <div class="fs-row"><div class="step-badge">1</div><div><div class="fs-title">Personal Details</div><div class="fs-sub">Your basic contact info</div></div></div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">Full Name *</label><input class="finput" id="p_name" placeholder="Your legal name"/></div>
+        <div class="fgroup"><label class="flabel">Phone Number *</label><input class="finput" id="p_phone" placeholder="+1 (555) 000-0000"/></div>
+      </div>
+      <div class="fgroup"><label class="flabel">Email Address *</label><input class="finput" id="p_email" type="email" placeholder="you@email.com"/></div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="p_city" placeholder="City you'll work in"/></div>
+        <div class="fgroup"><label class="flabel">Experience</label>
+          <select class="fselect" id="p_exp"><option value="">Select...</option><option>Less than 1 year</option><option>1–3 years</option><option>3–5 years</option><option>5+ years</option></select>
+        </div>
+      </div>
+      <div class="fgroup"><label class="flabel">Home Address *</label><input class="finput" id="p_addr" placeholder="Your full home address"/></div>
+    </div>
+    <!-- Step 2 -->
+    <div class="form-section">
+      <div class="fs-row"><div class="step-badge">2</div><div><div class="fs-title">Your Vehicle</div><div class="fs-sub">What you'll use for deliveries</div></div></div>
+      <div class="fgroup"><label class="flabel">Vehicle Type *</label>
+        <select class="fselect" id="p_vehicle"><option value="">Choose vehicle...</option><option value="bike">🏍️ Bike</option><option value="car">🚗 Car</option><option value="small_truck">🚐 Small Truck</option><option value="truck">🚛 Truck</option></select>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">License Plate *</label><input class="finput" id="p_plate" placeholder="e.g. ABC-1234"/></div>
+        <div class="fgroup"><label class="flabel">Driver's License No. *</label><input class="finput" id="p_license" placeholder="License number"/></div>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">Vehicle Make</label><input class="finput" id="p_make" placeholder="e.g. Toyota"/></div>
+        <div class="fgroup"><label class="flabel">Vehicle Year</label><input class="finput" id="p_year" placeholder="e.g. 2020"/></div>
+      </div>
+    </div>
+    <!-- Step 3 -->
+    <div class="form-section">
+      <div class="fs-row"><div class="step-badge">3</div><div><div class="fs-title">ID Verification</div><div class="fs-sub">To activate your partner account</div></div></div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">ID Type</label>
+          <select class="fselect" id="p_idtype"><option value="">Select...</option><option>National ID</option><option>Passport</option><option>Driver's License</option><option>Voter's Card</option></select>
+        </div>
+        <div class="fgroup"><label class="flabel">ID Number</label><input class="finput" id="p_idnum" placeholder="Your ID number"/></div>
+      </div>
+      <div class="privacy">🔒 Your data is encrypted and only used for verification.</div>
+      <button class="btn-black mt8" onclick="submitPartner()">Submit Application →</button>
+      <p style="text-align:center;font-size:12px;color:#9CA3AF;margin-top:10px">By submitting you agree to our Partner Terms & Privacy Policy</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── TRACK PAGE ── -->
+<div class="page hidden" id="page-track">
+  <div class="track-hero">
+    <div class="track-glow"></div>
+    <h2>Track Your <span>Order</span></h2>
+    <p>Enter your Tracking ID to see your delivery status in real time.</p>
+  </div>
+  <div class="track-input-wrap">
+    <label class="flabel">Enter your Tracking ID</label>
+    <div class="track-row">
+      <input class="finput" id="trackInput" placeholder="e.g. SWAB12CD" style="text-transform:uppercase;letter-spacing:1px;font-weight:700"/>
+      <button class="btn-blue" onclick="trackOrder()" style="margin-top:0;width:auto;padding:11px 22px;flex-shrink:0">Track →</button>
+    </div>
+  </div>
+  <div class="track-result hidden" id="trackResult"></div>
+  <div id="trackMapWrap" class="hidden">
+    <button onclick="toggleMap('trackMap','trackMapBtn')" id="trackMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Route Map</button>
+    <div id="trackMap" class="map-box-track" style="display:none;"></div>
+  </div>
+  <div class="track-not-found hidden" id="trackNotFound">
+    <div class="nf-icon">🔍</div>
+    <div>Order not found. Please check your Tracking ID and try again.</div>
+  </div>
+</div>
+
+<!-- ── PROFILE PAGE ── -->
+<div class="page hidden" id="page-profile">
+  <div class="track-hero">
+    <div class="track-glow"></div>
+    <h2>My <span>Profile</span></h2>
+    <p>Your saved details and preferences.</p>
+  </div>
+  <div class="form-section" style="margin-bottom:14px;">
+    <div class="fs-row"><div class="step-badge">📍</div><div><div class="fs-title">Saved Address</div><div class="fs-sub">Used as your default pickup/delivery point</div></div></div>
+    <div class="fgroup"><label class="flabel">Street Address</label><input class="finput" id="prof_street" placeholder="e.g. 42 Main Street"/></div>
+    <div class="col2">
+      <div class="fgroup"><label class="flabel">City</label><input class="finput" id="prof_city" placeholder="City"/></div>
+      <div class="fgroup"><label class="flabel">State</label><input class="finput" id="prof_state" placeholder="State"/></div>
+    </div>
+    <div class="col2">
+      <div class="fgroup"><label class="flabel">PIN Code</label><input class="finput" id="prof_zip" placeholder="PIN Code"/></div>
+      <div class="fgroup"><label class="flabel">Country</label><input class="finput" id="prof_country" placeholder="Country"/></div>
+    </div>
+    <button class="btn-blue" onclick="saveProfile()">Save Changes →</button>
+    <div id="prof_saved" style="display:none;text-align:center;font-size:13px;font-weight:600;color:#16A34A;margin-top:10px;">✅ Address updated!</div>
+  </div>
+  <div class="form-section">
+    <div class="fs-row"><div class="step-badge">📦</div><div><div class="fs-title">My Orders</div><div class="fs-sub">Recently placed bookings</div></div></div>
+    <div id="prof_orders"></div>
+  </div>
+</div>
+
+<!-- BOTTOM TOOLBAR -->
+<div class="toolbar">
+  <button class="tbtn active" id="tb-book" onclick="showTab('book',this)">
+    <span class="ticon">📦</span>Book<div class="tbar"></div>
+  </button>
+  <button class="tbtn" id="tb-track" onclick="showTab('track',this)">
+    <span class="ticon">🔍</span>Track<div class="tbar"></div>
+  </button>
+  <button class="tbtn" id="tb-partner" onclick="showTab('partner',this)">
+    <span class="ticon">🚗</span>Partner<div class="tbar"></div>
+  </button>
+  <button class="tbtn" id="tb-profile" onclick="showTab('profile',this);loadProfile()">
+    <span class="ticon">👤</span>Profile<div class="tbar"></div>
+  </button>
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────
+const vehicles=[
+  {id:"bike",  icon:"🏍️",name:"Bike",       desc:"Documents & small parcels",cap:"Up to 20 kg",  price:"₹45",  pricePerKm:8 },
+  {id:"car",   icon:"🚗", name:"Car",         desc:"Bags & medium packages",   cap:"Up to 100 kg", price:"₹130", pricePerKm:15},
+  {id:"struck",icon:"🚐", name:"Small Truck", desc:"Furniture & appliances",   cap:"Up to 500 kg", price:"₹399", pricePerKm:25},
+  {id:"truck", icon:"🚛", name:"Truck",       desc:"House moves & bulk cargo", cap:"Up to 5,000 kg",price:"₹1,299",pricePerKm:50},
+];
+
+// ── SUPABASE CONFIG ── Replace these with your actual project values ──
+const SUPABASE_URL     = "https://zsbzyokhsyrvuwduiifq.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzYnp5b2toc3lydnV3ZHVpaWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMDI1NDIsImV4cCI6MjA5MjU3ODU0Mn0.J3gPiP_r1k0HZA6zkeHJ854xr5dxU2NVb94y7_bGsFU";
+
+// Helper: call Supabase REST API
+async function sbFetch(path, method="GET", body=null){
+  if(!SUPABASE_URL||SUPABASE_URL.includes("YOUR_PROJECT")){
+    throw new Error("Supabase not configured");
+  }
+  const opts={
+    method,
+    headers:{
+      "Content-Type":"application/json",
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization":"Bearer "+SUPABASE_ANON_KEY,
+      "Prefer": method==="POST"?"return=representation":"",
+    }
+  };
+  if(body) opts.body=JSON.stringify(body);
+  const res=await fetch(SUPABASE_URL+path, opts);
+  if(!res.ok){
+    const err=await res.text();
+    throw new Error("Supabase error ("+res.status+"): "+err);
+  }
+  if(res.status===204) return null;
+  return res.json();
+}
+
+// Demo orders kept only for local tracking page fallback
+const fakeOrders={
+  "SWDEMO1":{ vehicle:"Car 🚗", status:"transit", pickup_addr:"42 Oak Avenue, Brooklyn, NY", delivery_addr:"100 5th Ave, Manhattan, NY", sender:"John Smith", receiver:"Mary Johnson", weight:"5 kg", notes:"Handle with care", date:"Apr 23, 2026", timeline:[{done:true,label:"Order Placed",time:"8:00 AM"},{done:true,label:"Picked Up",time:"9:15 AM"},{done:true,label:"In Transit",time:"9:30 AM"},{done:false,label:"Out for Delivery",time:""},{done:false,label:"Delivered",time:""}]},
+  "SWDEMO2":{ vehicle:"Bike 🏍️", status:"delivered", pickup_addr:"15 Pine Street, Queens, NY", delivery_addr:"88 River Road, Bronx, NY", sender:"Alice Brown", receiver:"Bob White", weight:"2 kg", notes:"", date:"Apr 22, 2026", timeline:[{done:true,label:"Order Placed",time:"10:00 AM"},{done:true,label:"Picked Up",time:"10:20 AM"},{done:true,label:"In Transit",time:"10:35 AM"},{done:true,label:"Out for Delivery",time:"11:00 AM"},{done:true,label:"Delivered",time:"11:18 AM"}]},
+};
+
+// State
+let userAddr="", userPhone="", userDisplayName="", activeVehicle=null, bookingMyRole=null, bookingOther="";
+let bookingDetails={};
+let ordersDB={...fakeOrders};
+
+function $(id){return document.getElementById(id);}
+function genId(){return "SW"+Math.random().toString(36).substring(2,8).toUpperCase();}
+
+// ── ONBOARDING ────────────────────────────────────────────────────
+let currentUser=null;
+
+async function checkPhone(){
+  const phoneEl=$("ob_phone");
+  if(!phoneEl) return;
+  const phone=phoneEl.value.trim();
+  if(!phone){alert("Please enter your phone number.");return;}
+  userPhone=phone;
+
+  const btn=$("ob_step1").querySelector("button");
+  if(btn){btn.disabled=true;btn.textContent="Checking...";}
+
+  // 1. Check localStorage first (instant, works everywhere)
+  try{
+    const saved=localStorage.getItem("shipmate_user_"+phone);
+    if(saved){
+      const u=JSON.parse(saved);
+      currentUser=u;
+      userAddr=u.street+", "+u.city+", "+u.state+" "+u.pin+(u.country?", "+u.country:"");
+      const ov=$("onboardingOverlay");
+      ov.classList.add("hidden");
+      ov.style.display="none";
+      if($("heroAddr")) $("heroAddr").textContent=userAddr;
+      if($("navAddr"))  $("navAddr").textContent="📍 "+u.city;
+      buildVehicleGrid();
+      return;
+    }
+  }catch(e){}
+
+  // 2. Try Supabase
+  try{
+    const rows=await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(phone)+"&select=*");
+    if(rows&&rows.length>0){
+      const u=rows[0];
+      currentUser=u;
+      try{localStorage.setItem("shipmate_user_"+phone,JSON.stringify(u));}catch(e){}
+      userAddr=u.street+", "+u.city+", "+u.state+" "+u.pin+(u.country?", "+u.country:"");
+      const ov=$("onboardingOverlay");
+      ov.classList.add("hidden");
+      ov.style.display="none";
+      if($("heroAddr")) $("heroAddr").textContent=userAddr;
+      if($("navAddr"))  $("navAddr").textContent="📍 "+u.city;
+      buildVehicleGrid();
+      return;
+    }
+  }catch(e){}
+
+  // 3. New user — show details form
+  if(btn){btn.disabled=false;btn.textContent="Continue →";}
+  $("ob_step1").style.display="none";
+  $("ob_step2").style.display="block";
+}
+
+async function saveAddress(){
+  const name=$("ob_name").value.trim();
+  const street=$("ob_street").value.trim();
+  const city=$("ob_city").value.trim();
+  const state=$("ob_state").value.trim();
+  const zip=$("ob_zip").value.trim();
+  if(!name||!street||!city||!state||!zip){alert("Please fill in Name, Street, City, State and PIN Code.");return;}
+  const country=$("ob_country").value.trim();
+  const email=$("ob_email").value.trim();
+  const phone=$("ob_phone").value.trim();
+
+  userAddr=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
+  userPhone=phone;
+
+  // Store globally so booking step 3 can autofill
+  currentUser={name, phone, email, street, city, state, pin:zip, country};
+  try{localStorage.setItem("shipmate_user_"+phone,JSON.stringify(currentUser));}catch(e){}
+
+  // Save user to Supabase
+  try{
+    await sbFetch("/rest/v1/users","POST",{
+      phone, name, email, street, city, state, pin:zip, country
+    });
+  }catch(e){
+    try{
+      await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(phone),"PATCH",{
+        name, email, street, city, state, pin:zip, country
+      });
+    }catch(e2){}
+  }
+
+  $("onboardingOverlay").classList.add("hidden");
+  $("heroAddr").textContent=userAddr;
+  $("navAddr").textContent="📍 "+city;
+  buildVehicleGrid();
+}
+$("ob_phone").addEventListener("keydown",e=>{if(e.key==="Enter")checkPhone();});
+
+// ── TABS ──────────────────────────────────────────────────────────
+function showTab(tab, btn){
+  document.querySelectorAll(".tbtn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  ["book","partner","track","profile"].forEach(p=>{
+    $(("page-"+p)).classList.toggle("hidden", p!==tab);
+  });
+}
+
+// ── PROFILE ───────────────────────────────────────────────────────
+function loadProfile(){
+  if(userAddr && userAddr!=="Your address"){
+    const parts=userAddr.split(", ");
+    if($("prof_street"))$("prof_street").value=parts[0]||"";
+    if($("prof_city"))$("prof_city").value=parts[1]||"";
+    const statezip=(parts[2]||"").split(" ");
+    if($("prof_state"))$("prof_state").value=statezip[0]||"";
+    if($("prof_zip"))$("prof_zip").value=statezip[1]||"";
+    if($("prof_country"))$("prof_country").value=parts[3]||"";
+  }
+  const ordersWrap=$("prof_orders");
+  const keys=Object.keys(ordersDB).filter(k=>!["SWDEMO1","SWDEMO2"].includes(k));
+  if(!keys.length){
+    ordersWrap.innerHTML=`<div style="text-align:center;padding:16px 0;font-size:13px;color:#9CA3AF;">No bookings yet. Book your first shipment!</div>`;
+    return;
+  }
+  ordersWrap.innerHTML=keys.reverse().map(k=>{
+    const o=ordersDB[k];
+    const st={pending:"🟡 Pending",transit:"🔵 In Transit",out_for_delivery:"🔵 Out for Delivery",delivered:"🟢 Delivered"}[o.status]||"🟡 Pending";
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F3F4F6;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#111;">${k}</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:2px;">${o.vehicle} · ${o.date||"Today"}</div>
+      </div>
+      <div style="font-size:12px;font-weight:600;">${st}</div>
+    </div>`;
+  }).join("");
+}
+function saveProfile(){
+  const street=$("prof_street").value.trim();
+  const city=$("prof_city").value.trim();
+  const state=$("prof_state").value.trim();
+  const zip=$("prof_zip").value.trim();
+  if(!street||!city||!state||!zip){alert("Please fill in Street, City, State and ZIP.");return;}
+  const country=$("prof_country").value.trim();
+  userAddr=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
+  $("heroAddr").textContent=userAddr;
+  $("navAddr").textContent="📍 "+city;
+  $("prof_saved").style.display="block";
+  setTimeout(()=>{$("prof_saved").style.display="none";},2500);
+}
+
+// ── VEHICLE GRID ──────────────────────────────────────────────────
+function buildVehicleGrid(){
+  $("vehicleGrid").innerHTML=vehicles.map(v=>`
+    <div class="vcard" onclick="openBooking('${v.id}')">
+      <span class="vcard-icon">${v.icon}</span>
+      <div class="vcard-name">${v.name}</div>
+      <div class="vcard-desc">${v.desc}</div>
+      <div class="vcard-cap">${v.cap}</div>
+      <div class="vcard-price">${v.price} <span>starting</span></div>
+      <div class="vcard-tap">Book now →</div>
+      <div class="vcard-bar"></div>
+    </div>`).join("");
+}
+
+// ── BOOKING SHEET ─────────────────────────────────────────────────
+function openBooking(vid){
+  activeVehicle=vehicles.find(v=>v.id===vid);
+  bookingMyRole=null; bookingOther=""; bookingDetails={};
+  renderSheet(1);
+  $("bookingOverlay").classList.remove("hidden");
+}
+function closeBooking(){$("bookingOverlay").classList.add("hidden"); activeVehicle=null;}
+$("bookingOverlay").addEventListener("click",function(e){if(e.target===this)closeBooking();});
+
+function dots(current,total){
+  return '<div class="step-dots">'+Array.from({length:total},(_,i)=>`<div class="sdot${i<current?' active':''}"></div>`).join("")+'</div>';
+}
+
+function renderSheet(step){
+  const v=activeVehicle;
+  let h=`<div class="sheet-vtag">${v.icon} &nbsp;${v.name} &nbsp;·&nbsp; ${v.price}/start</div>`;
+  h+=dots(step,4);
+
+  if(step===1){
+    h+=`
+      <div class="sheet-q">Is your address the pickup or delivery point?</div>
+      <div class="sheet-hint">Your saved address: <strong style="color:#111">${userAddr}</strong></div>
+      <div class="choices">
+        <button class="choice" onclick="chooseRole('pickup')">
+          <span class="choice-emoji">📦</span>
+          <span class="choice-label">Pickup</span>
+          <span class="choice-hint">Collect from my address</span>
+        </button>
+        <button class="choice" onclick="chooseRole('delivery')">
+          <span class="choice-emoji">🏠</span>
+          <span class="choice-label">Delivery</span>
+          <span class="choice-hint">Deliver to my address</span>
+        </button>
+      </div>
+      <button class="btn-link" onclick="closeBooking()">← Change vehicle</button>`;
+  }
+
+  if(step===2){
+    const isPickup=bookingMyRole==="pickup";
+    h+=`
+      <div class="sheet-q">${isPickup?"Where should we deliver it?":"Where should we pick it up from?"}</div>
+      <div class="sheet-hint">${isPickup?"Enter the full delivery address.":"Enter the full pickup address."}</div>
+      <div class="fgroup">
+        <label class="flabel">Street Address *</label>
+        <div class="autocomplete-wrap">
+          <input class="finput hi" id="otherStreet" placeholder="e.g. 42 Main Street, Apt 3B" oninput="addrAutocomplete(this,'otherCity','otherState','otherZip','otherCountry')"/>
+          <div class="autocomplete-list" id="otherStreet_list" style="display:none"></div>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="otherCity" placeholder="e.g. Mumbai"/></div>
+        <div class="fgroup"><label class="flabel">State *</label><input class="finput" id="otherState" placeholder="e.g. Maharashtra"/></div>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">PIN Code *</label><input class="finput" id="otherZip" placeholder="e.g. 400001"/></div>
+        <div class="fgroup"><label class="flabel">Country</label><input class="finput" id="otherCountry" placeholder="e.g. India"/></div>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">${isPickup?"Receiver's Name *":"Sender's Name *"}</label>
+        <input class="finput" id="otherName" placeholder="${isPickup?"Who receives the shipment?":"Who is sending?"}"/>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">${isPickup?"Receiver's Phone *":"Sender's Phone *"}</label>
+        <input class="finput" id="otherPhone" placeholder="+91 00000 00000"/>
+      </div>
+      <button class="btn-blue" onclick="confirmAddr()" style="margin-top:4px">Next →</button>
+      <button class="btn-link" onclick="renderSheet(1)">← Go back</button>`;
+  }
+
+  if(step===3){
+    const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
+    const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
+    // Try to autofill from currentUser or userPhone
+    const autoName = currentUser?currentUser.name:"";
+    const autoPhone= currentUser?currentUser.phone:(userPhone||"");
+    const autoEmail= currentUser?currentUser.email:"";
+    h+=`
+      <div class="sheet-q">When should we come?</div>
+      <div class="sheet-hint">Pick your preferred date and time.</div>
+      <div class="summary">
+        📦 <strong>Pickup:</strong> ${pickupAddr}<br>
+        🏠 <strong>Delivery:</strong> ${deliveryAddr}
+      </div>
+      <input type="hidden" id="b_name" value="${autoName}"/>
+      <input type="hidden" id="b_phone" value="${autoPhone}"/>
+      <input type="hidden" id="b_email" value="${autoEmail}"/>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">Preferred Date *</label><input class="finput" id="b_date" type="date"/></div>
+        <div class="fgroup"><label class="flabel">Preferred Time</label>
+          <select class="fselect" id="b_time">
+            <option value="">Any time</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–5pm)</option><option>Evening (5pm–9pm)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn-blue" onclick="goToStep4()" style="margin-top:4px">Next →</button>
+      <button class="btn-link" onclick="renderSheet(2)">← Go back</button>`;
+  }
+
+  if(step===4){
+    const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
+    const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
+    const paymentLabel= bookingMyRole==="pickup" ? "💵 Cash on Pickup" : "💵 Cash on Delivery";
+    h+=`
+      <div class="sheet-q">Shipment Details</div>
+      <div class="sheet-hint">Help us understand what we're moving.</div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">Item Type *</label>
+          <select class="fselect" id="b_itemtype">
+            <option value="">Select...</option><option>Documents / Papers</option><option>Clothing / Fashion</option><option>Electronics</option><option>Food / Groceries</option><option>Furniture</option><option>Appliances</option><option>Moving Boxes</option><option>Fragile Items</option><option>Medical / Pharmacy</option><option>Other</option>
+          </select>
+        </div>
+        <div class="fgroup"><label class="flabel">Estimated Weight</label>
+          <select class="fselect" id="b_weight">
+            <option value="">Select...</option><option>Under 1 kg</option><option>1 – 5 kg</option><option>5 – 20 kg</option><option>20 – 100 kg</option><option>100 kg+</option>
+          </select>
+        </div>
+      </div>
+      <div class="fgroup"><label class="flabel">Item Description *</label>
+        <textarea class="ftarea" id="b_desc" placeholder="e.g. 1 large sofa, 3 medium boxes, 1 TV (packed)"></textarea>
+      </div>
+      <div class="fgroup"><label class="flabel">Quantity / Number of Items</label><input class="finput" id="b_qty" placeholder="e.g. 5 boxes"/></div>
+      <div class="fgroup">
+        <label class="flabel">Special Instructions</label>
+        <textarea class="ftarea" id="b_special" placeholder="e.g. Fragile, keep upright. Ring doorbell twice." style="min-height:56px"></textarea>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Payment Method</label>
+        <div style="background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;color:#111;">${paymentLabel}</div>
+        <!-- PAYMENT_HOOK: Replace above div with payment gateway integration in future -->
+      </div>
+      <div id="fareBox" style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;margin-top:4px;">
+        <div style="font-size:12px;color:#6B7280;margin-bottom:6px;">Estimated Fare</div>
+        <div id="fareText" style="font-size:22px;font-weight:800;color:#2563EB;">Calculating…</div>
+        <div id="fareBreakdown" style="font-size:12px;color:#6B7280;margin-top:4px;"></div>
+      </div>
+      <div class="summary">
+        📦 <strong>Pickup:</strong> ${pickupAddr}<br>
+        🏠 <strong>Delivery:</strong> ${deliveryAddr}<br>
+        🚘 <strong>Vehicle:</strong> ${activeVehicle.icon} ${activeVehicle.name}
+      </div>
+      <button class="btn-blue" onclick="confirmBooking()" style="margin-top:4px">Confirm Booking →</button>
+      <button class="btn-link" onclick="renderSheet(3)">← Go back</button>`;
+  }
+
+  $("bookingSheet").innerHTML=h;
+  if(step===2) setTimeout(()=>{const el=$("otherStreet");if(el)el.focus();},50);
+  if(step===4){
+    // Auto calculate fare when step 4 loads
+    const pu=bookingMyRole==="pickup"?userAddr:bookingOther;
+    const dl=bookingMyRole==="delivery"?userAddr:bookingOther;
+    setTimeout(()=>calculateFare(pu,dl,activeVehicle),300);
+  }
+}
+
+function chooseRole(role){bookingMyRole=role; renderSheet(2);}
+
+function previewSummary(){
+  const val=$("otherAddrInput").value.trim();
+  const box=$("addrSummary");
+  if(val.length>3){
+    const pu=bookingMyRole==="pickup"?userAddr:val;
+    const dl=bookingMyRole==="delivery"?userAddr:val;
+    box.innerHTML=`📦 <strong>Pickup:</strong> ${pu}<br>🏠 <strong>Delivery:</strong> ${dl}`;
+    box.style.display="block";
+  } else { box.style.display="none"; }
+}
+
+function confirmAddr(){
+  const street=$("otherStreet")?$("otherStreet").value.trim():"";
+  const city=$("otherCity")?$("otherCity").value.trim():"";
+  const state=$("otherState")?$("otherState").value.trim():"";
+  const zip=$("otherZip")?$("otherZip").value.trim():"";
+  if(!street||!city||!state||!zip){alert("Please fill in Street, City, State and PIN Code.");return;}
+  const country=$("otherCountry")?$("otherCountry").value.trim():"";
+  bookingOther=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
+  bookingDetails.otherName=$("otherName")?$("otherName").value.trim():"";
+  bookingDetails.otherPhone=$("otherPhone")?$("otherPhone").value.trim():"";
+  renderSheet(3);
+}
+
+function goToStep4(){
+  const date=$("b_date")?$("b_date").value:"";
+  if(!date){alert("Please select a preferred date.");return;}
+  bookingDetails.name=currentUser?currentUser.name:($("b_name")?$("b_name").value.trim():"");
+  bookingDetails.phone=currentUser?currentUser.phone:(userPhone||($("b_phone")?$("b_phone").value.trim():""));
+  bookingDetails.email=currentUser?currentUser.email:($("b_email")?$("b_email").value.trim():"");
+  bookingDetails.date=date;
+  bookingDetails.time=$("b_time")?$("b_time").value:"";
+  renderSheet(4);
+}
+
+async function confirmBooking(){
+  const desc=$("b_desc")?$("b_desc").value.trim():"";
+  const itype=$("b_itemtype")?$("b_itemtype").value:"";
+  if(!itype||!desc){alert("Please select item type and describe what you're shipping.");return;}
+
+  const tid=genId();
+  const pickup_addr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
+  const delivery_addr= bookingMyRole==="delivery"? userAddr : bookingOther;
+
+  const payload={
+    tracking_id:  tid,
+    vehicle:      activeVehicle.name+" "+activeVehicle.icon,
+    status:       "pending",
+    pickup_addr,
+    delivery_addr,
+    sender:       bookingMyRole==="pickup"   ? bookingDetails.name : (bookingDetails.otherName||"—"),
+    receiver:     bookingMyRole==="delivery" ? bookingDetails.name : (bookingDetails.otherName||"—"),
+    sender_phone: bookingMyRole==="pickup"   ? bookingDetails.phone : (bookingDetails.otherPhone||""),
+    receiver_phone:bookingMyRole==="delivery"? bookingDetails.phone : (bookingDetails.otherPhone||""),
+    booker_name:  bookingDetails.name,
+    booker_phone: bookingDetails.phone,
+    booker_email: bookingDetails.email||"",
+    preferred_date: bookingDetails.date,
+    preferred_time: bookingDetails.time||"Any time",
+    item_type:    itype,
+    description:  desc,
+    weight:       $("b_weight")?$("b_weight").value||"Not specified":"Not specified",
+    quantity:     $("b_qty")?$("b_qty").value.trim():"",
+    notes:        $("b_special")?$("b_special").value.trim():"",
+    payment_method: bookingMyRole==="pickup"?"Cash on Pickup":"Cash on Delivery",
+    user_phone:   userPhone,
+    fare:         lastFareData.total||null,
+    distance_km:  lastFareData.dist||null,
+    created_at:   new Date().toISOString(),
+  };
+
+  // ── Disable confirm button to prevent double-submit ──
+  const confirmBtn=document.querySelector('button[onclick="confirmBooking()"]');
+  if(confirmBtn){confirmBtn.disabled=true;confirmBtn.textContent="Booking…";}
+
+  try {
+    // ── INSERT INTO SUPABASE ──
+    await sbFetch("/rest/v1/orders","POST", payload);
+  } catch(err){
+    console.error("Booking failed:", err);
+    alert("Booking failed. Please check your connection and try again.\n\nDetails: "+err.message);
+    if(confirmBtn){confirmBtn.disabled=false;confirmBtn.textContent="Confirm Booking →";}
+    return;
+  }
+
+  // ── Also keep in local ordersDB so tracking works in the same session ──
+  ordersDB[tid]={
+    vehicle:      payload.vehicle,
+    status:       "pending",
+    pickup_addr,
+    delivery_addr,
+    sender:       payload.sender,
+    receiver:     payload.receiver,
+    weight:       payload.weight,
+    notes:        payload.notes,
+    date:         payload.preferred_date,
+    desc:         payload.description,
+    timeline:[
+      {done:true, label:"Order Placed",     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
+      {done:false,label:"Picked Up",        time:""},
+      {done:false,label:"In Transit",       time:""},
+      {done:false,label:"Out for Delivery", time:""},
+      {done:false,label:"Delivered",        time:""},
+    ]
+  };
+
+  closeBooking();
+  $("vehicleGrid").style.display="none";
+  $("vgridLabel").style.display="none";
+  const suc=$("bookSuccess");
+  suc.classList.remove("hidden");
+  $("successMsg").textContent=`Your ${activeVehicle.name} is booked! Fare: ₹${lastFareData.total||"—"}. A driver will be assigned shortly.`;
+  $("trackId").textContent=tid;
+  activeVehicle=null;
+}
+
+function resetBooking(){
+  $("bookSuccess").classList.add("hidden");
+  $("vehicleGrid").style.display="grid";
+  $("vgridLabel").style.display="block";
+  activeVehicle=null;
+}
+
+// ── TRACKING ──────────────────────────────────────────────────────
+async function trackOrder(){
+  const raw=$("trackInput").value.trim().toUpperCase();
+  const result=$("trackResult");
+  const notFound=$("trackNotFound");
+  result.classList.add("hidden");
+  notFound.classList.add("hidden");
+  if(!raw){alert("Please enter a Tracking ID.");return;}
+
+  // Show loading state
+  result.innerHTML=`<div style="text-align:center;padding:24px;font-size:14px;color:#6B7280;">🔍 Looking up your order…</div>`;
+  result.classList.remove("hidden");
+
+  let order=null;
+
+  // 1. Try Supabase first
+  try{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+encodeURIComponent(raw)+"&select=*");
+    if(rows && rows.length>0){
+      const r=rows[0];
+      // Normalise Supabase row → local shape expected by the render block below
+      order={
+        vehicle:       r.vehicle,
+        status:        r.status||"pending",
+        pickup_addr:   r.pickup_addr,
+        delivery_addr: r.delivery_addr,
+        sender:        r.sender,
+        receiver:      r.receiver,
+        weight:        r.weight||"",
+        notes:         r.notes||"",
+        date:          r.preferred_date||r.created_at?.slice(0,10)||"",
+        timeline:[
+          {done:true, label:"Order Placed",      time: r.created_at ? new Date(r.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):""},
+          {done:r.status!=="pending",            label:"Picked Up",         time:""},
+          {done:r.status==="transit"||r.status==="delivered", label:"In Transit",time:""},
+          {done:r.status==="out_for_delivery"||r.status==="delivered", label:"Out for Delivery",time:""},
+          {done:r.status==="delivered",          label:"Delivered",         time:""},
+        ]
+      };
+    }
+  }catch(err){
+    console.warn("Supabase lookup failed, falling back to local DB:", err);
+  }
+
+  // 2. Fall back to local ordersDB (demo orders + same-session bookings)
+  if(!order) order=ordersDB[raw]||null;
+
+  if(!order){
+    result.classList.add("hidden");
+    notFound.classList.remove("hidden");
+    return;
+  }
+
+  const statusMap={
+    pending:{label:"⏳ Pending",cls:"ts-pending"},
+    transit:{label:"🚚 In Transit",cls:"ts-transit"},
+    out_for_delivery:{label:"🚚 Out for Delivery",cls:"ts-transit"},
+    delivered:{label:"✅ Delivered",cls:"ts-delivered"},
+  };
+  const st=statusMap[order.status]||statusMap.pending;
+  const tlItems=order.timeline.map((t,i)=>{
+    const isLast=i===order.timeline.length-1;
+    const dotCls=t.done?(i===order.timeline.findIndex(x=>!x.done)-1?"current":"done"):"";
+    return `<div class="tl-item">
+      <div class="tl-dot-wrap">
+        <div class="tl-dot ${dotCls}"></div>
+        ${!isLast?`<div class="tl-line ${t.done?'done':''}"></div>`:''}
+      </div>
+      <div class="tl-text" style="padding-bottom:${isLast?'0':'12px'}">
+        <strong>${t.label}</strong>${t.time?` — <span style="color:#9CA3AF">${t.time}</span>`:''}
+      </div>
+    </div>`;
+  }).join("");
+
+  const pickupShow  = order.pickup_addr  || order.pickupAddr  || "—";
+  const deliveryShow= order.delivery_addr|| order.deliveryAddr|| "—";
+
+  result.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:16px;font-weight:800;color:#000;letter-spacing:1px">${raw}</div>
+      <div class="track-status-badge ${st.cls}">${st.label}</div>
+    </div>
+    <div style="font-size:13px;color:#6B7280;margin-bottom:18px;">${order.vehicle} &nbsp;·&nbsp; Booked ${order.date||"today"}</div>
+    ${order.fare?`<div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:12px 16px;margin-bottom:12px;"><div style="font-size:11px;color:#6B7280;">Fare</div><div style="font-size:20px;font-weight:800;color:#2563EB;">₹${parseInt(order.fare).toLocaleString("en-IN")}</div>${order.distance_km?`<div style="font-size:11px;color:#6B7280;">${order.distance_km} km</div>`:""}</div>`:""}
+    <div class="track-info-grid">
+      <div class="tinfo-card"><div class="tinfo-label">📦 Pickup</div><div class="tinfo-val">${pickupShow}</div></div>
+      <div class="tinfo-card"><div class="tinfo-label">🏠 Delivery</div><div class="tinfo-val">${deliveryShow}</div></div>
+      <div class="tinfo-card"><div class="tinfo-label">👤 Sender</div><div class="tinfo-val">${order.sender||"—"}</div></div>
+      <div class="tinfo-card"><div class="tinfo-label">👤 Receiver</div><div class="tinfo-val">${order.receiver||"—"}</div></div>
+      ${order.weight?`<div class="tinfo-card"><div class="tinfo-label">⚖️ Weight</div><div class="tinfo-val">${order.weight}</div></div>`:""}
+      ${order.notes?`<div class="tinfo-card"><div class="tinfo-label">📝 Notes</div><div class="tinfo-val">${order.notes}</div></div>`:""}
+    </div>
+    <div class="track-timeline">
+      <div class="tl-title">Delivery Progress</div>
+      ${tlItems}
+    </div>`;
+  result.classList.remove("hidden");
+
+  // 22 — Show map toggle button and wire up initTrackMap
+  const tmWrap=$("trackMapWrap");
+  if(tmWrap){
+    tmWrap.classList.remove("hidden");
+    const pu=pickupShow, dl=deliveryShow;
+    const btn=document.getElementById("trackMapBtn");
+    if(btn) btn.onclick=()=>{
+      const mapEl=$("trackMap");
+      if(!mapEl) return;
+      if(mapEl.style.display==="none"||!mapEl.style.display){
+        mapEl.style.display="block";
+        btn.textContent="🗺️ Hide Map";
+        if(!mapInstances["trackMap"]) initTrackMap(pu,dl);
+      } else {
+        mapEl.style.display="none";
+        btn.textContent="🗺️ Show Route Map";
+      }
+    };
+  }
+}
+$("trackInput").addEventListener("keydown",e=>{if(e.key==="Enter")trackOrder();});
+
+// ── PARTNER ───────────────────────────────────────────────────────
+function submitPartner(){
+  const req=["p_name","p_phone","p_email","p_city","p_addr","p_vehicle","p_plate","p_license"];
+  for(const id of req){if(!$(id)||!$(id).value.trim()){alert("Please fill in all required fields.");return;}}
+  $("partnerFormWrap").classList.add("hidden");
+  $("partnerSuccess").classList.remove("hidden");
+  $("partnerRef").textContent=genId();
+}
+function resetPartner(){
+  $("partnerSuccess").classList.add("hidden");
+  $("partnerFormWrap").classList.remove("hidden");
+  ["p_name","p_phone","p_email","p_city","p_addr","p_plate","p_license","p_idnum","p_make","p_year"].forEach(id=>{if($(id))$(id).value="";});
+  ["p_exp","p_vehicle","p_idtype"].forEach(id=>{if($(id))$(id).selectedIndex=0;});
+}
+
+// ── MAP, FARE & PARTNER ROUTE SYSTEM ──────────────────────────────
+let mapInstances={};
+let autocompleteTimer=null;
+let lastFareData={};
+let partnerPickupCoord=null;
+let partnerDeliveryCoord=null;
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+async function geocode(addr){
+  try{
+    const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(addr),{headers:{"Accept-Language":"en"}});
+    const data=await res.json();
+    if(data&&data.length>0) return {lat:parseFloat(data[0].lat),lon:parseFloat(data[0].lon)};
+  }catch(e){}
+  return null;
+}
+
+// Extract city from address (second part after first comma)
+function extractCity(addr){
+  const parts=addr.split(",");
+  // Try to find the city — usually 2nd or 3rd part
+  if(parts.length>=2) return parts[1].trim().replace(/\d{6}/g,"").trim();
+  return parts[0].trim();
+}
+
+// Extract 6-digit PIN from address
+function extractPin(addr){
+  const m=addr.match(/\b(\d{6})\b/);
+  return m?m[1]:null;
+}
+
+// Get coords from city name using Nominatim
+async function geocodeCity(city){
+  try{
+    const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(city+", India"),{headers:{"Accept-Language":"en"}});
+    const data=await res.json();
+    if(data&&data.length>0) return {lat:parseFloat(data[0].lat),lon:parseFloat(data[0].lon),name:city};
+  }catch(e){}
+  return null;
+}
+
+// Get coords from PIN code → city
+async function geocodePin(pin){
+  try{
+    const res=await fetch("https://api.postalpincode.in/pincode/"+pin);
+    const data=await res.json();
+    if(data&&data[0]&&data[0].Status==="Success"&&data[0].PostOffice&&data[0].PostOffice.length>0){
+      const po=data[0].PostOffice[0];
+      return await geocodeCity(po.District||po.Name);
+    }
+  }catch(e){}
+  return null;
+}
+
+// Get REAL road distance using OSRM
+async function getRoadDistanceKm(pu,dl){
+  try{
+    const url=`https://router.project-osrm.org/route/v1/driving/${pu.lon},${pu.lat};${dl.lon},${dl.lat}?overview=false`;
+    const res=await fetch(url);
+    const data=await res.json();
+    if(data&&data.routes&&data.routes.length>0) return data.routes[0].distance/1000;
+  }catch(e){}
+  return null;
+}
+
+async function calculateFare(pickupAddr,deliveryAddr,vehicle){
+  const fareText=document.getElementById("fareText");
+  const fareBreak=document.getElementById("fareBreakdown");
+  if(!fareText) return;
+  fareText.textContent="Calculating…";
+
+  const base=parseInt(vehicle.price.replace(/[₹,]/g,""));
+  const perKm=vehicle.pricePerKm||10;
+
+  let pu=null,dl=null;
+  let puCityName="",dlCityName="";
+
+  // 1. Try PIN code → city coords
+  const puPin=extractPin(pickupAddr);
+  const dlPin=extractPin(deliveryAddr);
+  if(puPin&&dlPin){
+    [pu,dl]=await Promise.all([geocodePin(puPin),geocodePin(dlPin)]);
+    if(pu) puCityName=pu.name||puPin;
+    if(dl) dlCityName=dl.name||dlPin;
+  }
+
+  // 2. Fallback → extract city name from address
+  if(!pu||!dl){
+    const puCity=extractCity(pickupAddr);
+    const dlCity=extractCity(deliveryAddr);
+    puCityName=puCity; dlCityName=dlCity;
+    [pu,dl]=await Promise.all([geocodeCity(puCity),geocodeCity(dlCity)]);
+  }
+
+  if(!pu||!dl){
+    // Can't detect city — show base fare only
+    fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+    if(fareBreak) fareBreak.textContent="Could not detect cities — base fare only";
+    lastFareData={dist:"?",total:base,pu:null,dl:null};
+    return;
+  }
+
+  const straightKm=haversine(pu.lat,pu.lon,dl.lat,dl.lon);
+
+  // Same city — within 10km straight line
+  if(straightKm<10){
+    fareText.textContent="₹"+base.toLocaleString("en-IN");
+    if(fareBreak) fareBreak.textContent=`Same city (${puCityName||dlCityName}) — base fare applies`;
+    lastFareData={dist:"<10",total:base,pu,dl};
+    return;
+  }
+
+  // City to city — haversine × 1.4 road multiplier
+  const distKm=Math.round(straightKm*1.4);
+  const total=Math.round(base+(distKm*perKm));
+  fareText.textContent="₹"+total.toLocaleString("en-IN");
+  if(fareBreak) fareBreak.textContent=`Base ₹${base} + ~${distKm} km × ₹${perKm}/km (${puCityName} → ${dlCityName})`;
+  lastFareData={dist:distKm,total,pu,dl};
+}
+
+function buildMap(containerId,markers,line,lineColor){
+  if(mapInstances[containerId]){mapInstances[containerId].remove();delete mapInstances[containerId];}
+  const center=[(markers[0].lat+markers[markers.length-1].lat)/2,(markers[0].lon+markers[markers.length-1].lon)/2];
+  const map=L.map(containerId).setView(center,12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+  markers.forEach(m=>{
+    const icon=L.divIcon({html:`<div style="background:${m.color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${m.emoji}</div>`,iconSize:[32,32],iconAnchor:[16,16],className:""});
+    L.marker([m.lat,m.lon],{icon}).addTo(map).bindPopup(m.label);
+  });
+  if(line) L.polyline(line,{color:lineColor||"#2563EB",weight:3,dashArray:"6,8"}).addTo(map);
+  map.fitBounds(markers.map(m=>[m.lat,m.lon]),{padding:[30,30]});
+  mapInstances[containerId]=map;
+}
+
+function toggleMap(mapId,btnId,initFn){
+  const el=document.getElementById(mapId),btn=document.getElementById(btnId);
+  if(!el||!btn) return;
+  if(el.style.display==="none"||!el.style.display){
+    el.style.display="block";
+    btn.textContent="🗺️ Hide Map";
+    if(!mapInstances[mapId] && initFn) initFn();
+  } else {
+    el.style.display="none";
+    btn.textContent="🗺️ Show Route Map";
+  }
+}
+
+// Booking success map
+function initSuccessMap(){
+  if(lastFareData.pu&&lastFareData.dl){
+    buildMap("successMap",[
+      {lat:lastFareData.pu.lat,lon:lastFareData.pu.lon,color:"#2563EB",emoji:"📦",label:"📦 Pickup"},
+      {lat:lastFareData.dl.lat,lon:lastFareData.dl.lon,color:"#16A34A",emoji:"🏠",label:"🏠 Delivery"}
+    ],[[lastFareData.pu.lat,lastFareData.pu.lon],[lastFareData.dl.lat,lastFareData.dl.lon]],"#2563EB");
+  }
+}
+
+// Tracking map
+async function initTrackMap(pickupAddr,deliveryAddr){
+  const [pu,dl]=await Promise.all([geocode(pickupAddr),geocode(deliveryAddr)]);
+  if(!pu||!dl) return;
+  buildMap("trackMap",[
+    {lat:pu.lat,lon:pu.lon,color:"#2563EB",emoji:"📦",label:"📦 Pickup"},
+    {lat:dl.lat,lon:dl.lon,color:"#16A34A",emoji:"🏠",label:"🏠 Delivery"}
+  ],[[pu.lat,pu.lon],[dl.lat,dl.lon]],"#2563EB");
+}
+
+// Address autocomplete
+async function addrAutocomplete(input,cityId,stateId,zipId,countryId){
+  const q=input.value.trim(),listId=input.id+"_list",list=document.getElementById(listId);
+  if(!list) return;
+  if(q.length<4){list.style.display="none";return;}
+  clearTimeout(autocompleteTimer);
+  autocompleteTimer=setTimeout(async()=>{
+    try{
+      const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"en"}});
+      const data=await res.json();
+      if(!data||!data.length){list.style.display="none";return;}
+      list.innerHTML=data.map((d,i)=>`<div class="autocomplete-item" onclick="fillAddr(${i},'${input.id}','${cityId}','${stateId}','${zipId}','${countryId}')">${d.display_name}</div>`).join("");
+      list._data=data; list.style.display="block";
+    }catch(e){list.style.display="none";}
+  },400);
+}
+
+function fillAddr(idx,streetId,cityId,stateId,zipId,countryId){
+  const list=document.getElementById(streetId+"_list");
+  if(!list||!list._data) return;
+  const d=list._data[idx],a=d.address||{};
+  const street=(a.road||a.pedestrian||a.footway||"")+(a.house_number?" "+a.house_number:"");
+  if($(streetId)) $(streetId).value=street||d.display_name.split(",")[0];
+  if($(cityId))   $(cityId).value=a.city||a.town||a.village||a.county||"";
+  if($(stateId))  $(stateId).value=a.state||"";
+  if($(zipId))    $(zipId).value=a.postcode||"";
+  if($(countryId))$(countryId).value=a.country||"";
+  list.style.display="none";
+}
+
+// ── PARTNER ROUTE ──────────────────────────────────────────────────
+async function partnerViewOrder(orderId,pickupAddr,deliveryAddr){
+  const [pu,dl]=await Promise.all([geocode(pickupAddr),geocode(deliveryAddr)]);
+  partnerPickupCoord=pu; partnerDeliveryCoord=dl;
+  const wrap=document.getElementById("partnerOrderWrap");
+  if(!wrap) return;
+  wrap.innerHTML=`
+    <div class="form-section" style="margin-top:16px;">
+      <div class="fs-row"><div class="step-badge">🚗</div><div><div class="fs-title">Your Assignment</div><div class="fs-sub">Order #${orderId}</div></div></div>
+      <div class="summary">📦 <strong>Pickup:</strong> ${pickupAddr}</div>
+      <button onclick="togglePartnerMap('pickup','partnerMap','partnerMapBtn')" id="partnerMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Pickup Route</button>
+      <div id="partnerMap" class="map-box" style="display:none;margin-top:8px;"></div>
+      <button onclick="partnerConfirmPickup('${orderId}','${deliveryAddr}')" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Pickup</button>
+    </div>`;
+}
+
+function togglePartnerMap(mode,mapId,btnId){
+  const el=document.getElementById(mapId),btn=document.getElementById(btnId);
+  if(!el||!btn) return;
+  if(el.style.display==="none"){
+    el.style.display="block";
+    btn.textContent="🗺️ Hide Map";
+    const destCoord=mode==="pickup"?partnerPickupCoord:partnerDeliveryCoord;
+    const color=mode==="pickup"?"#F59E0B":"#16A34A";
+    const destEmoji=mode==="pickup"?"📦":"🏠";
+    const destLabel=mode==="pickup"?"📦 Pickup Here":"🏠 Deliver Here";
+    if(navigator.geolocation && destCoord){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const you={lat:pos.coords.latitude,lon:pos.coords.longitude};
+        buildMap(mapId,[
+          {lat:you.lat,lon:you.lon,color:"#F59E0B",emoji:"🚗",label:"📍 You"},
+          {lat:destCoord.lat,lon:destCoord.lon,color:mode==="pickup"?"#2563EB":"#16A34A",emoji:destEmoji,label:destLabel}
+        ],[[you.lat,you.lon],[destCoord.lat,destCoord.lon]],color);
+      },()=>{
+        if(destCoord) buildMap(mapId,[{lat:destCoord.lat,lon:destCoord.lon,color:"#2563EB",emoji:destEmoji,label:destLabel}],null,color);
+      });
+    } else if(destCoord){
+      buildMap(mapId,[{lat:destCoord.lat,lon:destCoord.lon,color:"#2563EB",emoji:destEmoji,label:destLabel}],null,color);
+    }
+  } else {
+    el.style.display="none";
+    btn.textContent=mode==="pickup"?"🗺️ Show Pickup Route":"🗺️ Show Delivery Route";
+  }
+}
+
+async function partnerConfirmPickup(orderId,deliveryAddr){
+  try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"transit"});}catch(e){}
+  const wrap=document.getElementById("partnerOrderWrap");
+  if(!wrap) return;
+  wrap.innerHTML=`
+    <div class="form-section" style="margin-top:16px;">
+      <div class="fs-row"><div class="step-badge">🚚</div><div><div class="fs-title">Pickup Confirmed!</div><div class="fs-sub">Now deliver to destination</div></div></div>
+      <div class="summary">🏠 <strong>Delivery:</strong> ${deliveryAddr}</div>
+      <button onclick="togglePartnerMap('delivery','deliveryMap','deliveryMapBtn')" id="deliveryMapBtn" style="width:100%;padding:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;font-size:13px;font-weight:600;color:#16A34A;cursor:pointer;margin-top:8px;">🗺️ Show Delivery Route</button>
+      <div id="deliveryMap" class="map-box" style="display:none;margin-top:8px;"></div>
+      <button onclick="partnerConfirmDelivery('${orderId}')" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Delivery</button>
+    </div>`;
+}
+
+async function partnerConfirmDelivery(orderId){
+  try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"delivered"});}catch(e){}
+  const wrap=document.getElementById("partnerOrderWrap");
+  if(wrap) wrap.innerHTML=`<div class="form-section" style="text-align:center;padding:24px 0;"><div style="font-size:48px">🎉</div><div style="font-size:18px;font-weight:800;margin-top:12px;">Delivery Complete!</div><div style="font-size:13px;color:#6B7280;margin-top:6px;">Order #${orderId} marked as delivered.</div></div>`;
+}
+
+
+</script>
+</body>
+</html>
 /* ── OVERLAY ── */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;}
 .overlay.hidden{display:none;}
