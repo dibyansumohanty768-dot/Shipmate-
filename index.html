@@ -1085,8 +1085,8 @@ let partnerTotalEarnings=0;
 let partnerTotalDeliveries=0;
 
 // Autofill partner form from currentUser when partner tab is opened
-function initPartnerPage(){
-  // Check if already registered
+async function initPartnerPage(){
+  // 1. Check localStorage first (instant)
   try{
     const saved=localStorage.getItem("shipmate_partner_"+userPhone);
     if(saved){
@@ -1095,7 +1095,26 @@ function initPartnerPage(){
       return;
     }
   }catch(e){}
-  // Autofill from user profile
+
+  // 2. Check Supabase (for new device or cleared storage)
+  if(userPhone){
+    try{
+      const rows=await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(userPhone)+"&select=*");
+      if(rows&&rows.length>0){
+        const p=rows[0];
+        partnerData={
+          name:p.name,phone:p.phone,vehicle:p.vehicle,
+          plate:p.plate,aadhaar:p.id_number,refId:p.ref_id,
+          earnings:p.earnings||0,deliveries:p.deliveries||0
+        };
+        try{localStorage.setItem("shipmate_partner_"+userPhone,JSON.stringify(partnerData));}catch(e){}
+        showPartnerDashboard();
+        return;
+      }
+    }catch(e){}
+  }
+
+  // 3. New partner — autofill form from user profile
   if(currentUser){
     if($("p_name")) $("p_name").value=currentUser.name||"";
     if($("p_phone")) $("p_phone").value=currentUser.phone||userPhone||"";
@@ -1155,60 +1174,90 @@ async function loadNearbyOrders(){
   if(!list) return;
   list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">📍 Getting your location…</div>`;
 
-  // Get partner location
   navigator.geolocation.getCurrentPosition(async(pos)=>{
     partnerLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};
     await fetchAndShowOrders(list);
   },(err)=>{
-    // Location denied — show all pending orders
-    fetchAndShowOrders(list,true);
+    list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:36px">📍</div>
+      <div style="font-size:15px;font-weight:700;margin-top:10px;">Location Required</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:6px;">Please enable location access to see nearby orders within 5km.</div>
+      <button onclick="loadNearbyOrders()" style="margin-top:16px;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">Try Again</button>
+    </div>`;
   });
 }
 
-async function fetchAndShowOrders(list,skipLocation=false){
+async function fetchAndShowOrders(list){
+  list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">🔍 Finding orders near you…</div>`;
+
+  let orders=[];
   try{
-    const orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=20");
-    if(!orders||orders.length===0){
-      list.innerHTML=`<div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">🎉 No pending orders right now.<br>Check back soon!</div>`;
-      return;
-    }
-
-    // Filter by proximity to pickup address if we have location
-    let filtered=orders;
-    if(partnerLocation&&!skipLocation){
-      const withDist=await Promise.all(orders.map(async o=>{
-        const pin=extractPin(o.pickup_addr||"");
-        if(!pin) return {...o,dist:999};
-        const coords=await getPinCoords(pin);
-        if(!coords) return {...o,dist:999};
-        const d=haversine(partnerLocation.lat,partnerLocation.lon,coords.lat,coords.lon);
-        return {...o,dist:Math.round(d)};
-      }));
-      filtered=withDist.filter(o=>o.dist<=50).sort((a,b)=>a.dist-b.dist);
-    }
-
-    if(filtered.length===0){
-      list.innerHTML=`<div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">📍 No orders near you right now.<br>Try refreshing later.</div>`;
-      return;
-    }
-
-    list.innerHTML=filtered.map(o=>`
-      <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;padding:14px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div style="font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px">${o.tracking_id}</div>
-          ${o.dist!==undefined?`<div style="font-size:12px;color:#2563EB;font-weight:600">📍 ${o.dist} km away</div>`:""}
-        </div>
-        <div style="font-size:13px;margin-bottom:4px;">📦 <strong>Pickup:</strong> ${o.pickup_addr||"—"}</div>
-        <div style="font-size:13px;margin-bottom:4px;">🏠 <strong>Delivery:</strong> ${o.delivery_addr||"—"}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
-          <div style="font-size:16px;font-weight:800;color:#16A34A">${o.fare?`₹${parseInt(o.fare).toLocaleString("en-IN")}`:"₹—"}</div>
-          <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0})" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
-        </div>
-      </div>
-    `).join("");
+    orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50");
   }catch(e){
-    list.innerHTML=`<div style="text-align:center;padding:24px;color:#EF4444;font-size:13px;">Failed to load orders. Check connection.</div>`;
+    list.innerHTML=`<div style="text-align:center;padding:24px;color:#EF4444;font-size:13px;">Could not load orders. Check your connection.</div>`;
+    return;
   }
+
+  if(!orders||orders.length===0){
+    list.innerHTML=`<div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">🎉 No pending orders right now.<br>Check back soon!</div>`;
+    return;
+  }
+
+  // Filter only orders within 5km of partner's PICKUP location OR same PIN code
+  const withDist=await Promise.all(orders.map(async o=>{
+    try{
+      const pickupPin=extractPin(o.pickup_addr||"");
+      const partnerPin=extractPin(userAddr||"");
+
+      // Try distance calculation first
+      if(pickupPin){
+        const coords=await getPinCoords(pickupPin);
+        if(coords){
+          const d=haversine(partnerLocation.lat,partnerLocation.lon,coords.lat,coords.lon);
+          return {...o,dist:parseFloat(d.toFixed(1)),matchType:"distance"};
+        }
+      }
+
+      // Fallback — same PIN code as pickup
+      if(pickupPin&&partnerPin&&pickupPin===partnerPin){
+        return {...o,dist:0,matchType:"pin"};
+      }
+
+    }catch(e){}
+    return null;
+  }));
+
+  const nearby=withDist
+    .filter(o=>o!==null&&o.dist<=5)
+    .sort((a,b)=>a.dist-b.dist);
+
+  if(nearby.length===0){
+    list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:36px">🔍</div>
+      <div style="font-size:15px;font-weight:700;margin-top:10px;">No Orders Nearby</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:6px;">No pickup requests within 5km of your location right now.</div>
+      <button onclick="loadNearbyOrders()" style="margin-top:16px;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Refresh</button>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML=nearby.map(o=>`
+    <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px">${o.tracking_id}</div>
+        ${o.matchType==="pin"
+          ?`<div style="font-size:12px;color:#16A34A;font-weight:600">📮 Same PIN area</div>`
+          :`<div style="font-size:12px;color:#2563EB;font-weight:600">📍 ${o.dist} km away</div>`
+        }
+      </div>
+      <div style="font-size:13px;margin-bottom:4px;">📦 <strong>Pickup:</strong> ${o.pickup_addr||"—"}</div>
+      <div style="font-size:13px;margin-bottom:8px;">🏠 <strong>Delivery:</strong> ${o.delivery_addr||"—"}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:16px;font-weight:800;color:#16A34A">${o.fare?`₹${parseInt(o.fare).toLocaleString("en-IN")}`:"₹—"}</div>
+        <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0})" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
+      </div>
+    </div>
+  `).join("");
 }
 
 async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare){
@@ -1233,6 +1282,11 @@ async function partnerConfirmDelivery(orderId,fare){
   partnerData.earnings=(partnerData.earnings||0)+parseInt(fare||0);
   partnerData.deliveries=(partnerData.deliveries||0)+1;
   try{localStorage.setItem("shipmate_partner_"+partnerData.phone,JSON.stringify(partnerData));}catch(e){}
+  // Sync to Supabase
+  try{await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone),"PATCH",{
+    earnings:partnerData.earnings,
+    deliveries:partnerData.deliveries
+  });}catch(e){}
   updateDashStats();
 
   const wrap=$("partnerOrderWrap");
