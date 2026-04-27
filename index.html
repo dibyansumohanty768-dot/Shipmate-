@@ -5,9 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Shipmate</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding-bottom:80px;}
+
+/* ── MAP ── */
+.map-box{width:100%;height:220px;border-radius:12px;overflow:hidden;margin-top:12px;border:1.5px solid #E5E7EB;}
+.map-box-track{width:100%;height:260px;border-radius:12px;overflow:hidden;margin-top:14px;border:1.5px solid #E5E7EB;}
+.autocomplete-wrap{position:relative;}
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-radius:10px;z-index:999;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.10);}
+.autocomplete-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #F3F4F6;}
+.autocomplete-item:hover{background:#F0F4FF;}
 
 /* ── TOP NAV ── */
 .topnav{background:#000;height:56px;display:flex;align-items:center;justify-between;padding:0 24px;position:sticky;top:0;z-index:100;justify-content:space-between;}
@@ -208,35 +218,62 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
 <!-- ONBOARDING -->
 <div class="overlay" id="onboardingOverlay">
   <div class="ob-card">
-    <div class="ob-icon">📍</div>
-    <div class="ob-title">What's your address?</div>
-    <div class="ob-sub">We save this so you don't have to type it every time you book.</div>
-    <div class="fgroup">
-      <label class="flabel">Street Address *</label>
-      <input class="finput" id="ob_street" placeholder="e.g. 42 Main Street, Apt 3B"/>
+
+    <!-- STEP 1: Phone -->
+    <div id="ob_step1">
+      <div class="ob-icon">📱</div>
+      <div class="ob-title">Welcome to Shipmate</div>
+      <div class="ob-sub">Enter your phone number to get started. We'll autofill your details if you've used us before.</div>
+      <div class="fgroup">
+        <label class="flabel">Phone Number *</label>
+        <input class="finput" id="ob_phone" placeholder="e.g. 9876543210" type="tel" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"/>
+      </div>
+      <button class="btn-black mt8" onclick="checkPhone()">Continue →</button>
     </div>
-    <div class="col2">
+
+    <!-- STEP 2: Details -->
+    <div id="ob_step2" style="display:none">
+      <div class="ob-icon">📍</div>
+      <div class="ob-title">Your Details</div>
+      <div class="ob-sub">We save this so you don't have to type it every time you book.</div>
       <div class="fgroup">
-        <label class="flabel">City *</label>
-        <input class="finput" id="ob_city" placeholder="e.g. New York"/>
+        <label class="flabel">Full Name *</label>
+        <input class="finput" id="ob_name" placeholder="e.g. Rahul Sharma"/>
       </div>
       <div class="fgroup">
-        <label class="flabel">State / Province *</label>
-        <input class="finput" id="ob_state" placeholder="e.g. NY"/>
+        <label class="flabel">Email</label>
+        <input class="finput" id="ob_email" type="email" placeholder="you@email.com"/>
       </div>
+      <div class="fgroup">
+        <label class="flabel">Street Address *</label>
+        <div class="autocomplete-wrap">
+          <input class="finput" id="ob_street" placeholder="e.g. 42 Main Street, Apt 3B" oninput="addrAutocomplete(this,'ob_city','ob_state','ob_zip','ob_country')"/>
+          <div class="autocomplete-list" id="ob_street_list" style="display:none"></div>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup">
+          <label class="flabel">City *</label>
+          <input class="finput" id="ob_city" placeholder="e.g. Mumbai"/>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">State *</label>
+          <input class="finput" id="ob_state" placeholder="e.g. Maharashtra"/>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup">
+          <label class="flabel">PIN Code *</label>
+          <input class="finput" id="ob_zip" placeholder="e.g. 752106" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"/>
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Country</label>
+          <input class="finput" id="ob_country" placeholder="e.g. India"/>
+        </div>
+      </div>
+      <button class="btn-black mt8" onclick="saveAddress()">Save & Continue →</button>
     </div>
-    <div class="col2">
-      <div class="fgroup">
-        <label class="flabel">ZIP / Postal Code *</label>
-        <input class="finput" id="ob_zip" placeholder="e.g. 10001"/>
-      </div>
-      <div class="fgroup">
-        <label class="flabel">Country</label>
-        <input class="finput" id="ob_country" placeholder="e.g. USA"/>
-      </div>
-    </div>
-    <button class="btn-black mt8" onclick="saveAddress()">Save & Continue →</button>
-    <button onclick="skipOnboarding()" style="width:100%;padding:11px;background:transparent;color:#6B7280;border:1.5px solid #E5E7EB;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-top:8px;">Skip for now</button>
+
   </div>
 </div>
 
@@ -262,83 +299,106 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
   <div class="slabel" id="vgridLabel">Tap a vehicle to start booking</div>
   <div class="vgrid" id="vehicleGrid"></div>
   <div class="success-wrap hidden" id="bookSuccess">
-    <div class="s-circle" style="background:#F0FDF4;border:2px solid #86EFAC">✅</div>
-    <h2>Booking Confirmed!</h2>
+    <div class="s-circle" style="background:#FFF7ED;border:2px solid #FED7AA">🕐</div>
+    <h2>Looking for a Partner</h2>
     <p id="successMsg"></p>
     <div class="track-box" id="trackId"></div>
-    <p class="track-note">Save this Tracking ID to follow your order</p>
+    <p class="track-note">Use this Tracking ID to follow your shipment</p>
+    <div id="deliveryCodeBox" style="display:none;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:16px;margin-top:12px;text-align:center;">
+      <div style="font-size:12px;color:#92400E;font-weight:700;margin-bottom:6px;">🔐 Delivery Confirmation Code</div>
+      <div id="deliveryCodeNum" style="font-size:36px;font-weight:900;letter-spacing:10px;font-family:monospace;color:#111;">----</div>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Share this code with the partner ONLY after receiving your order</div>
+    </div>
+    <button onclick="toggleMap('successMap','successMapBtn',initSuccessMap)" id="successMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Route Map</button>
+    <div id="successMap" class="map-box" style="display:none;"></div>
     <button class="btn-ghost" style="max-width:260px;margin:16px auto 0" onclick="resetBooking()">← Book Another</button>
   </div>
 </div>
 
 <!-- ── PARTNER PAGE ── -->
 <div class="page hidden" id="page-partner">
-  <div class="partner-hero">
-    <div class="partner-glow"></div>
-    <h2>Drive. Deliver.<br><span>Earn More.</span></h2>
-    <p>Use your vehicle to earn on your own schedule. Join partners across 50+ cities.</p>
-  </div>
-  <div class="slabel">Why join us</div>
-  <div class="perks">
-    <div class="perk"><div class="perk-icon">💰</div><div class="perk-title">Great Earnings</div><div class="perk-desc">Top drivers earn $800–$2,000/month on their schedule.</div></div>
-    <div class="perk"><div class="perk-icon">⏰</div><div class="perk-title">Flexible Hours</div><div class="perk-desc">Accept or skip any job. Work when it suits you.</div></div>
-    <div class="perk"><div class="perk-icon">📲</div><div class="perk-title">Simple App</div><div class="perk-desc">Easy navigation, job alerts, and weekly payouts.</div></div>
-  </div>
-  <div class="success-wrap hidden" id="partnerSuccess">
-    <div class="s-circle" style="background:#EFF6FF;border:2px solid #BFDBFE">🤝</div>
-    <h2>Application Sent!</h2>
-    <p>Our team will contact you within <strong>24–48 hours</strong> to complete onboarding.</p>
-    <div class="track-box" style="background:#2563EB" id="partnerRef"></div>
-    <p class="track-note">Your reference number</p>
-    <button class="btn-ghost" style="max-width:240px;margin:16px auto 0" onclick="resetPartner()">← Back</button>
-  </div>
-  <div id="partnerFormWrap">
-    <div class="slabel">Registration</div>
-    <!-- Step 1 -->
+
+  <!-- Registration Form -->
+  <div id="partnerRegWrap">
+    <div class="partner-hero">
+      <div class="partner-glow"></div>
+      <h2>Drive. Deliver.<br><span>Earn More.</span></h2>
+      <p>Turn your vehicle into income. Work on your own schedule.</p>
+    </div>
+    <div class="perks">
+      <div class="perk"><div class="perk-icon">💰</div><div class="perk-title">Great Earnings</div><div class="perk-desc">Earn ₹500–₹2,000/day on your schedule.</div></div>
+      <div class="perk"><div class="perk-icon">⏰</div><div class="perk-title">Flexible Hours</div><div class="perk-desc">Accept or skip any job. Work when it suits you.</div></div>
+      <div class="perk"><div class="perk-icon">📲</div><div class="perk-title">Simple App</div><div class="perk-desc">Easy navigation, order alerts, instant earnings.</div></div>
+    </div>
+    <div class="slabel">Become a Partner</div>
+    <!-- Step 1: Personal -->
     <div class="form-section">
-      <div class="fs-row"><div class="step-badge">1</div><div><div class="fs-title">Personal Details</div><div class="fs-sub">Your basic contact info</div></div></div>
+      <div class="fs-row"><div class="step-badge">1</div><div><div class="fs-title">Personal Details</div><div class="fs-sub">Autofilled from your profile</div></div></div>
       <div class="col2">
         <div class="fgroup"><label class="flabel">Full Name *</label><input class="finput" id="p_name" placeholder="Your legal name"/></div>
-        <div class="fgroup"><label class="flabel">Phone Number *</label><input class="finput" id="p_phone" placeholder="+1 (555) 000-0000"/></div>
+        <div class="fgroup"><label class="flabel">Phone *</label><input class="finput" id="p_phone" type="tel" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)" placeholder="10-digit number"/></div>
       </div>
-      <div class="fgroup"><label class="flabel">Email Address *</label><input class="finput" id="p_email" type="email" placeholder="you@email.com"/></div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="p_city" placeholder="City you'll work in"/></div>
-        <div class="fgroup"><label class="flabel">Experience</label>
-          <select class="fselect" id="p_exp"><option value="">Select...</option><option>Less than 1 year</option><option>1–3 years</option><option>3–5 years</option><option>5+ years</option></select>
-        </div>
-      </div>
-      <div class="fgroup"><label class="flabel">Home Address *</label><input class="finput" id="p_addr" placeholder="Your full home address"/></div>
+      <div class="fgroup"><label class="flabel">Email</label><input class="finput" id="p_email" type="email" placeholder="you@email.com"/></div>
     </div>
-    <!-- Step 2 -->
+    <!-- Step 2: Vehicle -->
     <div class="form-section">
       <div class="fs-row"><div class="step-badge">2</div><div><div class="fs-title">Your Vehicle</div><div class="fs-sub">What you'll use for deliveries</div></div></div>
       <div class="fgroup"><label class="flabel">Vehicle Type *</label>
         <select class="fselect" id="p_vehicle"><option value="">Choose vehicle...</option><option value="bike">🏍️ Bike</option><option value="car">🚗 Car</option><option value="small_truck">🚐 Small Truck</option><option value="truck">🚛 Truck</option></select>
       </div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">License Plate *</label><input class="finput" id="p_plate" placeholder="e.g. ABC-1234"/></div>
-        <div class="fgroup"><label class="flabel">Driver's License No. *</label><input class="finput" id="p_license" placeholder="License number"/></div>
-      </div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">Vehicle Make</label><input class="finput" id="p_make" placeholder="e.g. Toyota"/></div>
-        <div class="fgroup"><label class="flabel">Vehicle Year</label><input class="finput" id="p_year" placeholder="e.g. 2020"/></div>
-      </div>
+      <div class="fgroup"><label class="flabel">License Plate *</label><input class="finput" id="p_plate" placeholder="e.g. OD05AB1234"/></div>
     </div>
-    <!-- Step 3 -->
+    <!-- Step 3: Aadhaar -->
     <div class="form-section">
-      <div class="fs-row"><div class="step-badge">3</div><div><div class="fs-title">ID Verification</div><div class="fs-sub">To activate your partner account</div></div></div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">ID Type</label>
-          <select class="fselect" id="p_idtype"><option value="">Select...</option><option>National ID</option><option>Passport</option><option>Driver's License</option><option>Voter's Card</option></select>
-        </div>
-        <div class="fgroup"><label class="flabel">ID Number</label><input class="finput" id="p_idnum" placeholder="Your ID number"/></div>
+      <div class="fs-row"><div class="step-badge">3</div><div><div class="fs-title">Identity Verification</div><div class="fs-sub">Required for activation</div></div></div>
+      <div class="fgroup">
+        <label class="flabel">Aadhaar Card Number *</label>
+        <input class="finput" id="p_aadhaar" placeholder="12-digit Aadhaar number" maxlength="12" oninput="this.value=this.value.replace(/\D/g,'').slice(0,12)" type="tel"/>
       </div>
-      <div class="privacy">🔒 Your data is encrypted and only used for verification.</div>
-      <button class="btn-black mt8" onclick="submitPartner()">Submit Application →</button>
+      <div class="privacy">🔒 Your Aadhaar is encrypted and only used for verification.</div>
+      <button class="btn-black mt8" onclick="submitPartner()">Start Earning →</button>
       <p style="text-align:center;font-size:12px;color:#9CA3AF;margin-top:10px">By submitting you agree to our Partner Terms & Privacy Policy</p>
     </div>
   </div>
+
+  <!-- Partner Dashboard -->
+  <div id="partnerDashWrap" style="display:none;">
+    <div style="background:#000;padding:20px 20px 16px;color:#fff;">
+      <div style="font-size:18px;font-weight:800;">Welcome, <span id="dashName">Partner</span> 👋</div>
+      <div style="font-size:13px;color:#9CA3AF;margin-top:4px;">You are online and ready for orders</div>
+      <div style="display:flex;gap:12px;margin-top:14px;">
+        <div style="background:#111;border-radius:10px;padding:10px 14px;flex:1;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:#2563EB" id="dashEarnings">₹0</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">Total Earned</div>
+        </div>
+        <div style="background:#111;border-radius:10px;padding:10px 14px;flex:1;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:#16A34A" id="dashDeliveries">0</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">Deliveries</div>
+        </div>
+        <div style="background:#111;border-radius:10px;padding:10px 14px;flex:1;text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:#F59E0B" id="dashRating">—</div>
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">Rating</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Order Section -->
+    <div id="partnerOrderWrap"></div>
+
+    <!-- Available Orders -->
+    <div style="padding:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="font-size:15px;font-weight:800;">📦 Nearby Orders</div>
+        <button onclick="loadNearbyOrders()" style="background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#2563EB;cursor:pointer;">🔄 Refresh</button>
+      </div>
+      <div id="nearbyOrdersList">
+        <div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">
+          📍 Getting your location to find nearby orders…
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ── TRACK PAGE ── -->
@@ -356,6 +416,10 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
     </div>
   </div>
   <div class="track-result hidden" id="trackResult"></div>
+  <div id="trackMapWrap" class="hidden">
+    <button onclick="toggleMap('trackMap','trackMapBtn')" id="trackMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Route Map</button>
+    <div id="trackMap" class="map-box-track" style="display:none;"></div>
+  </div>
   <div class="track-not-found hidden" id="trackNotFound">
     <div class="nf-icon">🔍</div>
     <div>Order not found. Please check your Tracking ID and try again.</div>
@@ -377,7 +441,7 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
       <div class="fgroup"><label class="flabel">State</label><input class="finput" id="prof_state" placeholder="State"/></div>
     </div>
     <div class="col2">
-      <div class="fgroup"><label class="flabel">ZIP Code</label><input class="finput" id="prof_zip" placeholder="ZIP"/></div>
+      <div class="fgroup"><label class="flabel">PIN Code</label><input class="finput" id="prof_zip" placeholder="PIN Code"/></div>
       <div class="fgroup"><label class="flabel">Country</label><input class="finput" id="prof_country" placeholder="Country"/></div>
     </div>
     <button class="btn-blue" onclick="saveProfile()">Save Changes →</button>
@@ -408,10 +472,10 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
 <script>
 // ── DATA ──────────────────────────────────────────────────────────
 const vehicles=[
-  {id:"bike",  icon:"🏍️",name:"Bike",       desc:"Documents & small parcels",cap:"Up to 20 kg",  price:"$3" },
-  {id:"car",   icon:"🚗", name:"Car",         desc:"Bags & medium packages",   cap:"Up to 100 kg", price:"$8" },
-  {id:"struck",icon:"🚐", name:"Small Truck", desc:"Furniture & appliances",   cap:"Up to 500 kg", price:"$25"},
-  {id:"truck", icon:"🚛", name:"Truck",       desc:"House moves & bulk cargo", cap:"Up to 5,000 kg",price:"$80"},
+  {id:"bike",  icon:"🏍️",name:"Bike",       desc:"Documents & small parcels",cap:"Up to 20 kg",  price:"₹45",  pricePerKm:8 },
+  {id:"car",   icon:"🚗", name:"Car",         desc:"Bags & medium packages",   cap:"Up to 100 kg", price:"₹130", pricePerKm:15},
+  {id:"struck",icon:"🚐", name:"Small Truck", desc:"Furniture & appliances",   cap:"Up to 500 kg", price:"₹399", pricePerKm:25},
+  {id:"truck", icon:"🚛", name:"Truck",       desc:"House moves & bulk cargo", cap:"Up to 5,000 kg",price:"₹1,299",pricePerKm:50},
 ];
 
 // ── SUPABASE CONFIG ── Replace these with your actual project values ──
@@ -420,6 +484,9 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // Helper: call Supabase REST API
 async function sbFetch(path, method="GET", body=null){
+  if(!SUPABASE_URL||SUPABASE_URL.includes("YOUR_PROJECT")){
+    throw new Error("Supabase not configured");
+  }
   const opts={
     method,
     headers:{
@@ -435,7 +502,6 @@ async function sbFetch(path, method="GET", body=null){
     const err=await res.text();
     throw new Error("Supabase error ("+res.status+"): "+err);
   }
-  // 204 No Content has no body
   if(res.status===204) return null;
   return res.json();
 }
@@ -447,7 +513,7 @@ const fakeOrders={
 };
 
 // State
-let userAddr="", userDisplayName="", activeVehicle=null, bookingMyRole=null, bookingOther="";
+let userAddr="", userPhone="", userDisplayName="", activeVehicle=null, bookingMyRole=null, bookingOther="";
 let bookingDetails={};
 let ordersDB={...fakeOrders};
 
@@ -455,29 +521,105 @@ function $(id){return document.getElementById(id);}
 function genId(){return "SW"+Math.random().toString(36).substring(2,8).toUpperCase();}
 
 // ── ONBOARDING ────────────────────────────────────────────────────
-function saveAddress(){
+let currentUser=null;
+
+function loadUserOrders(phone){
+  try{
+    const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+phone)||"{}");
+    Object.assign(ordersDB, saved);
+  }catch(e){}
+}
+
+async function checkPhone(){
+  const phoneEl=$("ob_phone");
+  if(!phoneEl) return;
+  const phone=phoneEl.value.trim();
+  if(!phone){alert("Please enter your phone number.");return;}
+  userPhone=phone;
+
+  const btn=$("ob_step1").querySelector("button");
+  if(btn){btn.disabled=true;btn.textContent="Checking...";}
+
+  // 1. Check localStorage first (instant, works everywhere)
+  try{
+    const saved=localStorage.getItem("shipmate_user_"+phone);
+    if(saved){
+      const u=JSON.parse(saved);
+      currentUser=u;
+      userAddr=u.street+", "+u.city+", "+u.state+" "+u.pin+(u.country?", "+u.country:"");
+      loadUserOrders(phone);
+      const ov=$("onboardingOverlay");
+      ov.classList.add("hidden");
+      ov.style.display="none";
+      if($("heroAddr")) $("heroAddr").textContent=userAddr;
+      if($("navAddr"))  $("navAddr").textContent="📍 "+u.city;
+      buildVehicleGrid();
+      return;
+    }
+  }catch(e){}
+
+  // 2. Try Supabase
+  try{
+    const rows=await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(phone)+"&select=*");
+    if(rows&&rows.length>0){
+      const u=rows[0];
+      currentUser=u;
+      try{localStorage.setItem("shipmate_user_"+phone,JSON.stringify(u));}catch(e){}
+      userAddr=u.street+", "+u.city+", "+u.state+" "+u.pin+(u.country?", "+u.country:"");
+      loadUserOrders(phone);
+      const ov=$("onboardingOverlay");
+      ov.classList.add("hidden");
+      ov.style.display="none";
+      if($("heroAddr")) $("heroAddr").textContent=userAddr;
+      if($("navAddr"))  $("navAddr").textContent="📍 "+u.city;
+      buildVehicleGrid();
+      return;
+    }
+  }catch(e){}
+
+  // 3. New user — show details form
+  if(btn){btn.disabled=false;btn.textContent="Continue →";}
+  $("ob_step1").style.display="none";
+  $("ob_step2").style.display="block";
+}
+
+async function saveAddress(){
+  const name=$("ob_name").value.trim();
   const street=$("ob_street").value.trim();
   const city=$("ob_city").value.trim();
   const state=$("ob_state").value.trim();
   const zip=$("ob_zip").value.trim();
-  if(!street||!city||!state||!zip){alert("Please fill in Street, City, State and ZIP to continue, or tap 'Skip for now'.");return;}
+  if(!name||!street||!city||!state||!zip){alert("Please fill in Name, Street, City, State and PIN Code.");return;}
   const country=$("ob_country").value.trim();
+  const email=$("ob_email").value.trim();
+  const phone=$("ob_phone").value.trim();
+
   userAddr=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
+  userPhone=phone;
+
+  // Store globally so booking step 3 can autofill
+  currentUser={name, phone, email, street, city, state, pin:zip, country};
+  try{localStorage.setItem("shipmate_user_"+phone,JSON.stringify(currentUser));}catch(e){}
+
+  // Save user to Supabase
+  try{
+    await sbFetch("/rest/v1/users","POST",{
+      phone, name, email, street, city, state, pin:zip, country
+    });
+  }catch(e){
+    try{
+      await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(phone),"PATCH",{
+        name, email, street, city, state, pin:zip, country
+      });
+    }catch(e2){}
+  }
+
   $("onboardingOverlay").classList.add("hidden");
   $("heroAddr").textContent=userAddr;
   $("navAddr").textContent="📍 "+city;
   buildVehicleGrid();
 }
-function skipOnboarding(){
-  userAddr="Not set";
-  const ov=document.getElementById("onboardingOverlay");
-  ov.classList.add("hidden");
-  ov.style.display="none";
-  document.getElementById("heroAddr").textContent="Set your address in Profile";
-  document.getElementById("navAddr").textContent="";
-  buildVehicleGrid();
-}
-$("ob_zip").addEventListener("keydown",e=>{if(e.key==="Enter")saveAddress();});
+$("ob_phone").addEventListener("keydown",e=>{if(e.key==="Enter")checkPhone();});
 
 // ── TABS ──────────────────────────────────────────────────────────
 function showTab(tab, btn){
@@ -486,10 +628,12 @@ function showTab(tab, btn){
   ["book","partner","track","profile"].forEach(p=>{
     $(("page-"+p)).classList.toggle("hidden", p!==tab);
   });
+  if(tab==="partner") initPartnerPage();
+  if(tab==="profile") loadProfile();
 }
 
 // ── PROFILE ───────────────────────────────────────────────────────
-function loadProfile(){
+async function loadProfile(){
   if(userAddr && userAddr!=="Your address"){
     const parts=userAddr.split(", ");
     if($("prof_street"))$("prof_street").value=parts[0]||"";
@@ -499,21 +643,75 @@ function loadProfile(){
     if($("prof_zip"))$("prof_zip").value=statezip[1]||"";
     if($("prof_country"))$("prof_country").value=parts[3]||"";
   }
+
   const ordersWrap=$("prof_orders");
+  ordersWrap.innerHTML=`<div style="text-align:center;padding:16px 0;font-size:13px;color:#9CA3AF;">Loading orders…</div>`;
+
+  // Fetch from Supabase if logged in
+  if(userPhone){
+    try{
+      const rows=await sbFetch("/rest/v1/orders?user_phone=eq."+encodeURIComponent(userPhone)+"&select=*&order=created_at.desc&limit=20");
+      if(rows&&rows.length>0){
+        rows.forEach(r=>{
+          // Always update status from Supabase (source of truth)
+          if(ordersDB[r.tracking_id]){
+            ordersDB[r.tracking_id].status=r.status||"pending";
+          } else {
+            ordersDB[r.tracking_id]={
+              vehicle:r.vehicle,status:r.status||"pending",
+              pickup_addr:r.pickup_addr,delivery_addr:r.delivery_addr,
+              sender:r.sender,receiver:r.receiver,weight:r.weight,
+              notes:r.notes,date:r.preferred_date,fare:r.fare,
+              delivery_code:r.delivery_code,
+              timeline:[
+                {done:true,label:"Order Placed",time:""},
+                {done:r.status!=="pending",label:"Picked Up",time:""},
+                {done:r.status==="transit"||r.status==="delivered",label:"In Transit",time:""},
+                {done:r.status==="delivered",label:"Delivered",time:""},
+              ]
+            };
+          }
+        });
+        // Save to localStorage
+        try{
+          const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
+          rows.forEach(r=>{if(ordersDB[r.tracking_id]) saved[r.tracking_id]=ordersDB[r.tracking_id];});
+          localStorage.setItem("shipmate_orders_"+userPhone,JSON.stringify(saved));
+        }catch(e){}
+      }
+    }catch(e){}
+  }
+
   const keys=Object.keys(ordersDB).filter(k=>!["SWDEMO1","SWDEMO2"].includes(k));
   if(!keys.length){
     ordersWrap.innerHTML=`<div style="text-align:center;padding:16px 0;font-size:13px;color:#9CA3AF;">No bookings yet. Book your first shipment!</div>`;
     return;
   }
-  ordersWrap.innerHTML=keys.reverse().map(k=>{
+  // Sort newest first using tracking ID (they're generated sequentially)
+  const sorted=keys.sort((a,b)=>b.localeCompare(a));
+  ordersWrap.innerHTML=sorted.map(k=>{
     const o=ordersDB[k];
-    const st={pending:"🟡 Pending",transit:"🔵 In Transit",out_for_delivery:"🔵 Out for Delivery",delivered:"🟢 Delivered"}[o.status]||"🟡 Pending";
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F3F4F6;">
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#111;">${k}</div>
-        <div style="font-size:12px;color:#6B7280;margin-top:2px;">${o.vehicle} · ${o.date||"Today"}</div>
+    const st={
+      pending:          "🔍 Looking for a nearby delivery partner",
+      accepted:         "✅ Booking Confirmed",
+      transit:          "🚚 In Transit",
+      out_for_delivery: "📦 Picked Up",
+      delivered:        "🏠 Delivered"
+    }[o.status]||"🔍 Looking for a nearby delivery partner";
+    const isActive=o.status!=="delivered";
+    return `<div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#111;">${k}</div>
+          <div style="font-size:12px;color:#6B7280;margin-top:2px;">${o.vehicle||""} · ${o.date||"Today"}${o.fare?` · ₹${parseInt(o.fare).toLocaleString("en-IN")}`:""}</div>
+        </div>
+        <div style="font-size:12px;font-weight:600;">${st}</div>
       </div>
-      <div style="font-size:12px;font-weight:600;">${st}</div>
+      ${isActive&&o.delivery_code?`
+      <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:11px;color:#92400E;font-weight:700;">🔐 Delivery Code</div>
+        <div style="font-size:18px;font-weight:900;letter-spacing:6px;font-family:monospace;">${o.delivery_code}</div>
+      </div>`:""}
     </div>`;
   }).join("");
 }
@@ -587,20 +785,30 @@ function renderSheet(step){
     const isPickup=bookingMyRole==="pickup";
     h+=`
       <div class="sheet-q">${isPickup?"Where should we deliver it?":"Where should we pick it up from?"}</div>
-      <div class="sheet-hint">${isPickup?"Enter the full address of the delivery destination.":"Enter the full address where we collect the shipment."}</div>
+      <div class="sheet-hint">${isPickup?"Enter the full delivery address.":"Enter the full pickup address."}</div>
       <div class="fgroup">
-        <label class="flabel">${isPickup?"🏠 Delivery Address":"📦 Pickup Address"}</label>
-        <input class="finput hi" id="otherAddrInput" placeholder="Street address, city, zip" oninput="previewSummary()"/>
+        <label class="flabel">Street Address *</label>
+        <div class="autocomplete-wrap">
+          <input class="finput hi" id="otherStreet" placeholder="e.g. 42 Main Street, Apt 3B" oninput="addrAutocomplete(this,'otherCity','otherState','otherZip','otherCountry')"/>
+          <div class="autocomplete-list" id="otherStreet_list" style="display:none"></div>
+        </div>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="otherCity" placeholder="e.g. Mumbai"/></div>
+        <div class="fgroup"><label class="flabel">State *</label><input class="finput" id="otherState" placeholder="e.g. Maharashtra"/></div>
+      </div>
+      <div class="col2">
+        <div class="fgroup"><label class="flabel">PIN Code *</label><input class="finput" id="otherZip" placeholder="e.g. 400001" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"/></div>
+        <div class="fgroup"><label class="flabel">Country</label><input class="finput" id="otherCountry" placeholder="e.g. India"/></div>
       </div>
       <div class="fgroup">
-        <label class="flabel">${isPickup?"Receiver's Name":"Sender's Name"}</label>
+        <label class="flabel">${isPickup?"Receiver's Name *":"Sender's Name *"}</label>
         <input class="finput" id="otherName" placeholder="${isPickup?"Who receives the shipment?":"Who is sending?"}"/>
       </div>
       <div class="fgroup">
-        <label class="flabel">${isPickup?"Receiver's Phone":"Sender's Phone"}</label>
-        <input class="finput" id="otherPhone" placeholder="+1 (555) 000-0000"/>
+        <label class="flabel">${isPickup?"Receiver's Phone *":"Sender's Phone *"}</label>
+        <input class="finput" id="otherPhone" placeholder="10-digit mobile number" maxlength="10" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)" type="tel"/>
       </div>
-      <div id="addrSummary" style="display:none" class="summary"></div>
       <button class="btn-blue" onclick="confirmAddr()" style="margin-top:4px">Next →</button>
       <button class="btn-link" onclick="renderSheet(1)">← Go back</button>`;
   }
@@ -608,18 +816,20 @@ function renderSheet(step){
   if(step===3){
     const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
     const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
+    // Try to autofill from currentUser or userPhone
+    const autoName = currentUser?currentUser.name:"";
+    const autoPhone= currentUser?currentUser.phone:(userPhone||"");
+    const autoEmail= currentUser?currentUser.email:"";
     h+=`
-      <div class="sheet-q">Your details</div>
-      <div class="sheet-hint">Tell us a bit more about yourself and the shipment.</div>
+      <div class="sheet-q">When should we come?</div>
+      <div class="sheet-hint">Pick your preferred date and time.</div>
       <div class="summary">
         📦 <strong>Pickup:</strong> ${pickupAddr}<br>
         🏠 <strong>Delivery:</strong> ${deliveryAddr}
       </div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">Your Full Name *</label><input class="finput" id="b_name" placeholder="e.g. John Smith"/></div>
-        <div class="fgroup"><label class="flabel">Your Phone *</label><input class="finput" id="b_phone" placeholder="+1 (555) 000-0000"/></div>
-      </div>
-      <div class="fgroup"><label class="flabel">Your Email</label><input class="finput" id="b_email" type="email" placeholder="you@email.com"/></div>
+      <input type="hidden" id="b_name" value="${autoName}"/>
+      <input type="hidden" id="b_phone" value="${autoPhone}"/>
+      <input type="hidden" id="b_email" value="${autoEmail}"/>
       <div class="col2">
         <div class="fgroup"><label class="flabel">Preferred Date *</label><input class="finput" id="b_date" type="date"/></div>
         <div class="fgroup"><label class="flabel">Preferred Time</label>
@@ -635,6 +845,7 @@ function renderSheet(step){
   if(step===4){
     const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
     const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
+    const paymentLabel= bookingMyRole==="pickup" ? "💵 Cash on Pickup" : "💵 Cash on Delivery";
     h+=`
       <div class="sheet-q">Shipment Details</div>
       <div class="sheet-hint">Help us understand what we're moving.</div>
@@ -653,13 +864,23 @@ function renderSheet(step){
       <div class="fgroup"><label class="flabel">Item Description *</label>
         <textarea class="ftarea" id="b_desc" placeholder="e.g. 1 large sofa, 3 medium boxes, 1 TV (packed)"></textarea>
       </div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">Quantity / Number of Items</label><input class="finput" id="b_qty" placeholder="e.g. 5 boxes"/></div>
-        <div class="fgroup"><label class="flabel">Package Value ($)</label><input class="finput" id="b_value" type="number" placeholder="e.g. 500"/></div>
-      </div>
+      <div class="fgroup"><label class="flabel">Quantity / Number of Items</label><input class="finput" id="b_qty" placeholder="e.g. 5 boxes"/></div>
       <div class="fgroup">
         <label class="flabel">Special Instructions</label>
         <textarea class="ftarea" id="b_special" placeholder="e.g. Fragile, keep upright. Ring doorbell twice." style="min-height:56px"></textarea>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Payment Method</label>
+        <div style="background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;color:#111;">${paymentLabel}</div>
+        <!-- PAYMENT_HOOK: Replace above div with payment gateway integration in future -->
+      </div>
+      <div id="fareBox" style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:14px 16px;margin-top:4px;">
+        <div style="display:flex;align-items:baseline;gap:8px;">
+          <div style="font-size:11px;color:#6B7280;">Estimated Fare</div>
+          <div style="font-size:11px;color:#93C5FD;">₹${activeVehicle.pricePerKm}/km after base</div>
+        </div>
+        <div id="fareText" style="font-size:22px;font-weight:800;color:#2563EB;">Calculating…</div>
+        <div id="fareBreakdown" style="font-size:12px;color:#6B7280;margin-top:4px;"></div>
       </div>
       <div class="summary">
         📦 <strong>Pickup:</strong> ${pickupAddr}<br>
@@ -671,7 +892,13 @@ function renderSheet(step){
   }
 
   $("bookingSheet").innerHTML=h;
-  if(step===2) setTimeout(()=>{const el=$("otherAddrInput");if(el){el.focus();el.addEventListener("keydown",e=>{if(e.key==="Enter")confirmAddr();});}},50);
+  if(step===2) setTimeout(()=>{const el=$("otherStreet");if(el)el.focus();},50);
+  if(step===4){
+    // Auto calculate fare when step 4 loads
+    const pu=bookingMyRole==="pickup"?userAddr:bookingOther;
+    const dl=bookingMyRole==="delivery"?userAddr:bookingOther;
+    setTimeout(()=>calculateFare(pu,dl,activeVehicle),300);
+  }
 }
 
 function chooseRole(role){bookingMyRole=role; renderSheet(2);}
@@ -688,22 +915,24 @@ function previewSummary(){
 }
 
 function confirmAddr(){
-  const val=$("otherAddrInput")?$("otherAddrInput").value.trim():"";
-  if(!val){alert("Please enter the address.");return;}
-  bookingOther=val;
+  const street=$("otherStreet")?$("otherStreet").value.trim():"";
+  const city=$("otherCity")?$("otherCity").value.trim():"";
+  const state=$("otherState")?$("otherState").value.trim():"";
+  const zip=$("otherZip")?$("otherZip").value.trim():"";
+  if(!street||!city||!state||!zip){alert("Please fill in Street, City, State and PIN Code.");return;}
+  const country=$("otherCountry")?$("otherCountry").value.trim():"";
+  bookingOther=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
   bookingDetails.otherName=$("otherName")?$("otherName").value.trim():"";
   bookingDetails.otherPhone=$("otherPhone")?$("otherPhone").value.trim():"";
   renderSheet(3);
 }
 
 function goToStep4(){
-  const name=$("b_name")?$("b_name").value.trim():"";
-  const phone=$("b_phone")?$("b_phone").value.trim():"";
   const date=$("b_date")?$("b_date").value:"";
-  if(!name||!phone){alert("Please enter your name and phone number.");return;}
   if(!date){alert("Please select a preferred date.");return;}
-  bookingDetails.name=name; bookingDetails.phone=phone;
-  bookingDetails.email=$("b_email")?$("b_email").value.trim():"";
+  bookingDetails.name=currentUser?currentUser.name:($("b_name")?$("b_name").value.trim():"");
+  bookingDetails.phone=currentUser?currentUser.phone:(userPhone||($("b_phone")?$("b_phone").value.trim():""));
+  bookingDetails.email=currentUser?currentUser.email:($("b_email")?$("b_email").value.trim():"");
   bookingDetails.date=date;
   bookingDetails.time=$("b_time")?$("b_time").value:"";
   renderSheet(4);
@@ -715,6 +944,7 @@ async function confirmBooking(){
   if(!itype||!desc){alert("Please select item type and describe what you're shipping.");return;}
 
   const tid=genId();
+  const delivery_code=Math.floor(1000+Math.random()*9000).toString(); // 4-digit code
   const pickup_addr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
   const delivery_addr= bookingMyRole==="delivery"? userAddr : bookingOther;
 
@@ -737,8 +967,12 @@ async function confirmBooking(){
     description:  desc,
     weight:       $("b_weight")?$("b_weight").value||"Not specified":"Not specified",
     quantity:     $("b_qty")?$("b_qty").value.trim():"",
-    declared_value: $("b_value")?$("b_value").value:"",
     notes:        $("b_special")?$("b_special").value.trim():"",
+    payment_method: bookingMyRole==="pickup"?"Cash on Pickup":"Cash on Delivery",
+    user_phone:   userPhone,
+    delivery_code: delivery_code,
+    fare:         lastFareData.total||null,
+    distance_km:  lastFareData.dist||null,
     created_at:   new Date().toISOString(),
   };
 
@@ -768,22 +1002,33 @@ async function confirmBooking(){
     notes:        payload.notes,
     date:         payload.preferred_date,
     desc:         payload.description,
+    fare:         payload.fare,
+    delivery_code,
     timeline:[
-      {done:true, label:"Order Placed",     time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
-      {done:false,label:"Picked Up",        time:""},
-      {done:false,label:"In Transit",       time:""},
-      {done:false,label:"Out for Delivery", time:""},
-      {done:false,label:"Delivered",        time:""},
+      {done:true, label:"Order Placed",           time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
+      {done:false,label:"Booking Confirmed",       time:""},
+      {done:false,label:"Picked Up",               time:""},
+      {done:false,label:"In Transit",              time:""},
+      {done:false,label:"Delivered",               time:""},
     ]
   };
+
+  // Save to localStorage so orders persist across sessions
+  try{
+    const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
+    saved[tid]=ordersDB[tid];
+    localStorage.setItem("shipmate_orders_"+userPhone, JSON.stringify(saved));
+  }catch(e){}
 
   closeBooking();
   $("vehicleGrid").style.display="none";
   $("vgridLabel").style.display="none";
   const suc=$("bookSuccess");
   suc.classList.remove("hidden");
-  $("successMsg").textContent=`Your ${activeVehicle.name} is booked! A driver will be assigned shortly. You'll receive SMS updates.`;
+  $("successMsg").textContent=`We've received your shipment request and are searching for a delivery partner near your pickup location. You'll be notified once someone accepts.`;
   $("trackId").textContent=tid;
+  if($("deliveryCodeNum")) $("deliveryCodeNum").textContent=delivery_code;
+  if($("deliveryCodeBox")) $("deliveryCodeBox").style.display="block";
   activeVehicle=null;
 }
 
@@ -848,10 +1093,11 @@ async function trackOrder(){
   }
 
   const statusMap={
-    pending:{label:"⏳ Pending",cls:"ts-pending"},
-    transit:{label:"🚚 In Transit",cls:"ts-transit"},
-    out_for_delivery:{label:"🚚 Out for Delivery",cls:"ts-transit"},
-    delivered:{label:"✅ Delivered",cls:"ts-delivered"},
+    pending:          {label:"🔍 Looking for a nearby delivery partner", cls:"ts-pending"},
+    accepted:         {label:"✅ Booking Confirmed",                      cls:"ts-transit"},
+    transit:          {label:"🚚 In Transit",                             cls:"ts-transit"},
+    out_for_delivery: {label:"📦 Picked Up",                             cls:"ts-transit"},
+    delivered:        {label:"🏠 Delivered",                              cls:"ts-delivered"},
   };
   const st=statusMap[order.status]||statusMap.pending;
   const tlItems=order.timeline.map((t,i)=>{
@@ -877,6 +1123,7 @@ async function trackOrder(){
       <div class="track-status-badge ${st.cls}">${st.label}</div>
     </div>
     <div style="font-size:13px;color:#6B7280;margin-bottom:18px;">${order.vehicle} &nbsp;·&nbsp; Booked ${order.date||"today"}</div>
+    ${order.fare?`<div style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border:1.5px solid #BFDBFE;border-radius:12px;padding:12px 16px;margin-bottom:12px;"><div style="font-size:11px;color:#6B7280;">Fare</div><div style="font-size:20px;font-weight:800;color:#2563EB;">₹${parseInt(order.fare).toLocaleString("en-IN")}</div>${order.distance_km?`<div style="font-size:11px;color:#6B7280;">${order.distance_km} km</div>`:""}</div>`:""}
     <div class="track-info-grid">
       <div class="tinfo-card"><div class="tinfo-label">📦 Pickup</div><div class="tinfo-val">${pickupShow}</div></div>
       <div class="tinfo-card"><div class="tinfo-label">🏠 Delivery</div><div class="tinfo-val">${deliveryShow}</div></div>
@@ -890,23 +1137,583 @@ async function trackOrder(){
       ${tlItems}
     </div>`;
   result.classList.remove("hidden");
+
+  // 22 — Show map toggle button and wire up initTrackMap
+  const tmWrap=$("trackMapWrap");
+  if(tmWrap){
+    tmWrap.classList.remove("hidden");
+    const pu=pickupShow, dl=deliveryShow;
+    const btn=document.getElementById("trackMapBtn");
+    if(btn) btn.onclick=()=>{
+      const mapEl=$("trackMap");
+      if(!mapEl) return;
+      if(mapEl.style.display==="none"||!mapEl.style.display){
+        mapEl.style.display="block";
+        btn.textContent="🗺️ Hide Map";
+        if(!mapInstances["trackMap"]) initTrackMap(pu,dl);
+      } else {
+        mapEl.style.display="none";
+        btn.textContent="🗺️ Show Route Map";
+      }
+    };
+  }
 }
 $("trackInput").addEventListener("keydown",e=>{if(e.key==="Enter")trackOrder();});
 
 // ── PARTNER ───────────────────────────────────────────────────────
-function submitPartner(){
-  const req=["p_name","p_phone","p_email","p_city","p_addr","p_vehicle","p_plate","p_license"];
-  for(const id of req){if(!$(id)||!$(id).value.trim()){alert("Please fill in all required fields.");return;}}
-  $("partnerFormWrap").classList.add("hidden");
-  $("partnerSuccess").classList.remove("hidden");
-  $("partnerRef").textContent=genId();
+// ── PARTNER SYSTEM ────────────────────────────────────────────────
+let partnerData=null;
+let partnerLocation=null;
+let partnerTotalEarnings=0;
+let partnerTotalDeliveries=0;
+
+// Autofill partner form from currentUser when partner tab is opened
+async function initPartnerPage(){
+  // 1. Check localStorage first (instant)
+  try{
+    const saved=localStorage.getItem("shipmate_partner_"+userPhone);
+    if(saved){
+      partnerData=JSON.parse(saved);
+      showPartnerDashboard();
+      return;
+    }
+  }catch(e){}
+
+  // 2. Check Supabase (for new device or cleared storage)
+  if(userPhone){
+    try{
+      const rows=await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(userPhone)+"&select=*");
+      if(rows&&rows.length>0){
+        const p=rows[0];
+        partnerData={
+          name:p.name,phone:p.phone,vehicle:p.vehicle,
+          plate:p.plate,aadhaar:p.id_number,refId:p.ref_id,
+          earnings:p.earnings||0,deliveries:p.deliveries||0
+        };
+        try{localStorage.setItem("shipmate_partner_"+userPhone,JSON.stringify(partnerData));}catch(e){}
+        showPartnerDashboard();
+        return;
+      }
+    }catch(e){}
+  }
+
+  // 3. New partner — autofill form from user profile
+  if(currentUser){
+    if($("p_name")) $("p_name").value=currentUser.name||"";
+    if($("p_phone")) $("p_phone").value=currentUser.phone||userPhone||"";
+    if($("p_email")) $("p_email").value=currentUser.email||"";
+  }
 }
+
+async function submitPartner(){
+  const name=$("p_name")?$("p_name").value.trim():"";
+  const phone=$("p_phone")?$("p_phone").value.trim():"";
+  const vehicle=$("p_vehicle")?$("p_vehicle").value:"";
+  const plate=$("p_plate")?$("p_plate").value.trim():"";
+  const aadhaar=$("p_aadhaar")?$("p_aadhaar").value.trim():"";
+
+  if(!name||!phone){alert("Please enter your name and phone.");return;}
+  if(!vehicle){alert("Please select your vehicle type.");return;}
+  if(!plate){alert("Please enter your license plate.");return;}
+  if(!aadhaar||aadhaar.length!==12){alert("Please enter a valid 12-digit Aadhaar number.");return;}
+
+  const refId=genId();
+  partnerData={name,phone,vehicle,plate,aadhaar,refId,earnings:0,deliveries:0};
+
+  // Save to localStorage
+  try{localStorage.setItem("shipmate_partner_"+phone,JSON.stringify(partnerData));}catch(e){}
+
+  // Save to Supabase
+  try{
+    await sbFetch("/rest/v1/partners","POST",{
+      name, phone,
+      email: $("p_email")?$("p_email").value.trim():"",
+      vehicle, plate,
+      id_number: aadhaar,
+      id_type: "Aadhaar",
+      ref_id: refId,
+      status: "active"
+    });
+  }catch(e){}
+
+  showPartnerDashboard();
+}
+
+function showPartnerDashboard(){
+  $("partnerRegWrap").style.display="none";
+  $("partnerDashWrap").style.display="block";
+  if($("dashName")) $("dashName").textContent=partnerData.name.split(" ")[0];
+  updateDashStats();
+  loadNearbyOrders();
+}
+
+function updateDashStats(){
+  if($("dashEarnings")) $("dashEarnings").textContent="₹"+(partnerData.earnings||0).toLocaleString("en-IN");
+  if($("dashDeliveries")) $("dashDeliveries").textContent=partnerData.deliveries||0;
+}
+
+async function loadNearbyOrders(){
+  const list=$("nearbyOrdersList");
+  if(!list) return;
+  list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">📍 Getting your location…</div>`;
+
+  navigator.geolocation.getCurrentPosition(async(pos)=>{
+    partnerLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};
+    await fetchAndShowOrders(list);
+  },(err)=>{
+    list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:36px">📍</div>
+      <div style="font-size:15px;font-weight:700;margin-top:10px;">Location Required</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:6px;">Please enable location access to see nearby orders within 5km.</div>
+      <button onclick="loadNearbyOrders()" style="margin-top:16px;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">Try Again</button>
+    </div>`;
+  });
+}
+
+async function fetchAndShowOrders(list){
+  list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">🔍 Finding orders near you…</div>`;
+
+  let orders=[];
+  try{
+    orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50");
+  }catch(e){
+    list.innerHTML=`<div style="text-align:center;padding:24px;color:#EF4444;font-size:13px;">Could not load orders. Check your connection.</div>`;
+    return;
+  }
+
+  if(!orders||orders.length===0){
+    list.innerHTML=`<div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">🎉 No pending orders right now.<br>Check back soon!</div>`;
+    return;
+  }
+
+  // Filter only orders within 5km of partner's PICKUP location OR same PIN code
+  const partnerPin=extractPin(userAddr||"");
+  const withDist=await Promise.all(orders.map(async o=>{
+    try{
+      const pickupPin=extractPin(o.pickup_addr||"");
+
+      // Same PIN code fallback
+      if(pickupPin&&partnerPin&&pickupPin===partnerPin){
+        return {...o,dist:0,matchType:"pin"};
+      }
+
+      // Try GPS distance
+      if(pickupPin){
+        const coords=await getPinCoords(pickupPin);
+        if(coords){
+          const d=haversine(partnerLocation.lat,partnerLocation.lon,coords.lat,coords.lon);
+          if(d<=5) return {...o,dist:parseFloat(d.toFixed(1)),matchType:"distance"};
+        }
+      }
+    }catch(e){}
+    return null;
+  }));
+
+  const nearby=withDist
+    .filter(o=>o!==null&&o.dist<=5)
+    .sort((a,b)=>a.dist-b.dist);
+
+  if(nearby.length===0){
+    list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:36px">🔍</div>
+      <div style="font-size:15px;font-weight:700;margin-top:10px;">No Orders Nearby</div>
+      <div style="font-size:13px;color:#6B7280;margin-top:6px;">No pickup requests within 5km of your location right now.</div>
+      <button onclick="loadNearbyOrders()" style="margin-top:16px;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">🔄 Refresh</button>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML=nearby.map(o=>`
+    <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;padding:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px">${o.tracking_id}</div>
+        ${o.matchType==="pin"
+          ?`<div style="font-size:12px;color:#16A34A;font-weight:600">📮 Same PIN area</div>`
+          :`<div style="font-size:12px;color:#2563EB;font-weight:600">📍 ${o.dist} km away</div>`
+        }
+      </div>
+      <div style="font-size:13px;margin-bottom:4px;">📦 <strong>Pickup:</strong> ${o.pickup_addr||"—"}</div>
+      <div style="font-size:13px;margin-bottom:8px;">🏠 <strong>Delivery:</strong> ${o.delivery_addr||"—"}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:16px;font-weight:800;color:#16A34A">${o.fare?`₹${parseInt(o.fare).toLocaleString("en-IN")}`:"₹—"}</div>
+        <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0})" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare){
+  // Mark order as accepted in Supabase
+  try{
+    await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{
+      status:"accepted",
+      partner_phone: partnerData.phone,
+      partner_name: partnerData.name
+    });
+  }catch(e){}
+
+  // Show pickup route
+  $("nearbyOrdersList").innerHTML="";
+  await partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare);
+}
+
+async function partnerConfirmDelivery(orderId,fare){
+  try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"delivered"});}catch(e){}
+
+  // Update earnings
+  partnerData.earnings=(partnerData.earnings||0)+parseInt(fare||0);
+  partnerData.deliveries=(partnerData.deliveries||0)+1;
+  try{localStorage.setItem("shipmate_partner_"+partnerData.phone,JSON.stringify(partnerData));}catch(e){}
+  // Sync to Supabase
+  try{await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone),"PATCH",{
+    earnings:partnerData.earnings,
+    deliveries:partnerData.deliveries
+  });}catch(e){}
+  updateDashStats();
+
+  const wrap=$("partnerOrderWrap");
+  if(wrap) wrap.innerHTML=`
+    <div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:48px">🎉</div>
+      <div style="font-size:20px;font-weight:800;margin-top:12px;">Delivery Complete!</div>
+      <div style="font-size:14px;color:#6B7280;margin-top:6px;">You earned <strong style="color:#16A34A">₹${parseInt(fare||0).toLocaleString("en-IN")}</strong></div>
+      <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
+    </div>`;
+}
+
 function resetPartner(){
-  $("partnerSuccess").classList.add("hidden");
-  $("partnerFormWrap").classList.remove("hidden");
-  ["p_name","p_phone","p_email","p_city","p_addr","p_plate","p_license","p_idnum","p_make","p_year"].forEach(id=>{if($(id))$(id).value="";});
-  ["p_exp","p_vehicle","p_idtype"].forEach(id=>{if($(id))$(id).selectedIndex=0;});
+  partnerData=null;
+  $("partnerRegWrap").style.display="block";
+  $("partnerDashWrap").style.display="none";
 }
+
+
+// ── MAP, FARE & PARTNER ROUTE SYSTEM ──────────────────────────────
+let mapInstances={};
+let autocompleteTimer=null;
+let lastFareData={};
+let partnerPickupCoord=null;
+let partnerDeliveryCoord=null;
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+async function geocode(addr){
+  try{
+    const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(addr),{headers:{"Accept-Language":"en"}});
+    const data=await res.json();
+    if(data&&data.length>0) return {lat:parseFloat(data[0].lat),lon:parseFloat(data[0].lon)};
+  }catch(e){}
+  return null;
+}
+
+// Extract most meaningful city/town from Indian address
+// Extract 6-digit Indian PIN from address
+function extractPin(addr){
+  // Match exactly 6 consecutive digits
+  const matches=addr.match(/\b\d{6}\b/g);
+  if(matches) return matches[0];
+  // Try extracting first 6 digits from any longer number (typo fix)
+  const loose=addr.match(/\d{6,}/g);
+  if(loose) return loose[0].substring(0,6);
+  return null;
+}
+
+// Get exact lat/lon from Indian PIN using India Post API direct coordinates
+// Get coords from PIN using India Post API
+async function getPinCoords(pin){
+  try{
+    const res=await fetch("https://api.postalpincode.in/pincode/"+pin);
+    const data=await res.json();
+    if(data&&data[0]&&data[0].Status==="Success"&&data[0].PostOffice){
+      for(const po of data[0].PostOffice){
+        if(po.Latitude&&po.Longitude&&po.Latitude!="NA"&&po.Longitude!="NA"&&parseFloat(po.Latitude)!==0){
+          return {lat:parseFloat(po.Latitude),lon:parseFloat(po.Longitude),name:po.Name};
+        }
+      }
+    }
+  }catch(e){}
+  return null;
+}
+
+async function calculateFare(pickupAddr,deliveryAddr,vehicle){
+  const fareText=document.getElementById("fareText");
+  const fareBreak=document.getElementById("fareBreakdown");
+  if(!fareText) return;
+  fareText.textContent="Calculating…";
+
+  const base=parseInt(vehicle.price.replace(/[₹,]/g,""));
+  const perKm=vehicle.pricePerKm||10;
+
+  const puPin=extractPin(pickupAddr);
+  const dlPin=extractPin(deliveryAddr);
+
+  if(!puPin||!dlPin){
+    fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+    if(fareBreak) fareBreak.textContent="Add PIN codes to both addresses for accurate fare";
+    lastFareData={dist:"?",total:base,pu:null,dl:null};
+    return;
+  }
+
+  // Get coordinates from India Post API
+  const [pu,dl]=await Promise.all([getPinCoords(puPin),getPinCoords(dlPin)]);
+
+  if(!pu||!dl){
+    // Fallback: estimate from PIN difference
+    const p1=parseInt(puPin),p2=parseInt(dlPin),diff=Math.abs(p1-p2);
+    let distKm=2;
+    if(diff===0) distKm=2;
+    else if(Math.floor(p1/100)===Math.floor(p2/100)) distKm=8;
+    else if(Math.floor(p1/1000)===Math.floor(p2/1000)) distKm=35;
+    else if(Math.floor(p1/10000)===Math.floor(p2/10000)) distKm=Math.min(200,Math.round(diff/50)+40);
+    else distKm=Math.min(1500,Math.round(diff/300)+200);
+    const total=Math.round(base+(distKm*perKm));
+    fareText.textContent="~₹"+total.toLocaleString("en-IN");
+    if(fareBreak) fareBreak.textContent=`Base ₹${base} + ~${distKm} km × ₹${perKm}/km (estimated)`;
+    lastFareData={dist:distKm,total,pu:null,dl:null};
+    return;
+  }
+
+  // Get real road distance from OSRM
+  try{
+    const osrmUrl=`https://router.project-osrm.org/route/v1/driving/${pu.lon},${pu.lat};${dl.lon},${dl.lat}?overview=false`;
+    const osrmRes=await fetch(osrmUrl);
+    const osrmData=await osrmRes.json();
+    if(osrmData&&osrmData.routes&&osrmData.routes.length>0){
+      const distKm=Math.round(osrmData.routes[0].distance/1000);
+      const total=Math.round(base+(distKm*perKm));
+      fareText.textContent="₹"+total.toLocaleString("en-IN");
+      if(fareBreak) fareBreak.textContent=`Base ₹${base} + ${distKm} km × ₹${perKm}/km (${pu.name} → ${dl.name})`;
+      lastFareData={dist:distKm,total,pu,dl};
+      return;
+    }
+  }catch(e){}
+
+  fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+  if(fareBreak) fareBreak.textContent="Route not available — showing base fare";
+  lastFareData={dist:"?",total:base,pu,dl};
+}
+
+
+function buildMap(containerId,markers,line,lineColor){
+  if(mapInstances[containerId]){mapInstances[containerId].remove();delete mapInstances[containerId];}
+  const center=[(markers[0].lat+markers[markers.length-1].lat)/2,(markers[0].lon+markers[markers.length-1].lon)/2];
+  const map=L.map(containerId).setView(center,12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+  markers.forEach(m=>{
+    const icon=L.divIcon({html:`<div style="background:${m.color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${m.emoji}</div>`,iconSize:[32,32],iconAnchor:[16,16],className:""});
+    L.marker([m.lat,m.lon],{icon}).addTo(map).bindPopup(m.label);
+  });
+  if(line) L.polyline(line,{color:lineColor||"#2563EB",weight:3,dashArray:"6,8"}).addTo(map);
+  map.fitBounds(markers.map(m=>[m.lat,m.lon]),{padding:[30,30]});
+  mapInstances[containerId]=map;
+}
+
+function toggleMap(mapId,btnId,initFn){
+  const el=document.getElementById(mapId),btn=document.getElementById(btnId);
+  if(!el||!btn) return;
+  if(el.style.display==="none"||!el.style.display){
+    el.style.display="block";
+    btn.textContent="🗺️ Hide Map";
+    if(!mapInstances[mapId] && initFn) initFn();
+  } else {
+    el.style.display="none";
+    btn.textContent="🗺️ Show Route Map";
+  }
+}
+
+// Booking success map
+function initSuccessMap(){
+  if(lastFareData.pu&&lastFareData.dl){
+    buildMap("successMap",[
+      {lat:lastFareData.pu.lat,lon:lastFareData.pu.lon,color:"#2563EB",emoji:"📦",label:"📦 Pickup"},
+      {lat:lastFareData.dl.lat,lon:lastFareData.dl.lon,color:"#16A34A",emoji:"🏠",label:"🏠 Delivery"}
+    ],[[lastFareData.pu.lat,lastFareData.pu.lon],[lastFareData.dl.lat,lastFareData.dl.lon]],"#2563EB");
+  }
+}
+
+// Tracking map
+async function initTrackMap(pickupAddr,deliveryAddr){
+  const [pu,dl]=await Promise.all([geocode(pickupAddr),geocode(deliveryAddr)]);
+  if(!pu||!dl) return;
+  buildMap("trackMap",[
+    {lat:pu.lat,lon:pu.lon,color:"#2563EB",emoji:"📦",label:"📦 Pickup"},
+    {lat:dl.lat,lon:dl.lon,color:"#16A34A",emoji:"🏠",label:"🏠 Delivery"}
+  ],[[pu.lat,pu.lon],[dl.lat,dl.lon]],"#2563EB");
+}
+
+// Address autocomplete
+async function addrAutocomplete(input,cityId,stateId,zipId,countryId){
+  const q=input.value.trim(),listId=input.id+"_list",list=document.getElementById(listId);
+  if(!list) return;
+  if(q.length<4){list.style.display="none";return;}
+  clearTimeout(autocompleteTimer);
+  autocompleteTimer=setTimeout(async()=>{
+    try{
+      const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"en"}});
+      const data=await res.json();
+      if(!data||!data.length){list.style.display="none";return;}
+      list.innerHTML=data.map((d,i)=>`<div class="autocomplete-item" onclick="fillAddr(${i},'${input.id}','${cityId}','${stateId}','${zipId}','${countryId}')">${d.display_name}</div>`).join("");
+      list._data=data; list.style.display="block";
+    }catch(e){list.style.display="none";}
+  },400);
+}
+
+function fillAddr(idx,streetId,cityId,stateId,zipId,countryId){
+  const list=document.getElementById(streetId+"_list");
+  if(!list||!list._data) return;
+  const d=list._data[idx],a=d.address||{};
+  const street=(a.road||a.pedestrian||a.footway||"")+(a.house_number?" "+a.house_number:"");
+  if($(streetId)) $(streetId).value=street||d.display_name.split(",")[0];
+  if($(cityId))   $(cityId).value=a.city||a.town||a.village||a.county||"";
+  if($(stateId))  $(stateId).value=a.state||"";
+  if($(zipId))    $(zipId).value=a.postcode||"";
+  if($(countryId))$(countryId).value=a.country||"";
+  list.style.display="none";
+}
+
+// ── PARTNER ROUTE ──────────────────────────────────────────────────
+async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare){
+  // Use PIN coords for map (more reliable than full address geocoding in India)
+  const puPin=extractPin(pickupAddr);
+  const dlPin=extractPin(deliveryAddr);
+  const [pu,dl]=await Promise.all([
+    puPin?getPinCoords(puPin):geocode(pickupAddr),
+    dlPin?getPinCoords(dlPin):geocode(deliveryAddr)
+  ]);
+  partnerPickupCoord=pu;
+  partnerDeliveryCoord=dl;
+
+  const partnerEarning=Math.round((fare||0)*0.75);
+  const wrap=$("partnerOrderWrap");
+  if(!wrap) return;
+  wrap.innerHTML=`
+    <div class="form-section" style="margin:16px;">
+      <div class="fs-row"><div class="step-badge">🚗</div><div><div class="fs-title">Your Assignment</div><div class="fs-sub">Order #${orderId}</div></div></div>
+      <div style="background:linear-gradient(135deg,#F0FDF4,#DCFCE7);border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+        <div style="font-size:11px;color:#6B7280;">Your Earning (75%)</div>
+        <div style="font-size:22px;font-weight:800;color:#16A34A;">₹${partnerEarning.toLocaleString("en-IN")}</div>
+        <div style="font-size:11px;color:#9CA3AF;">Total fare ₹${parseInt(fare||0).toLocaleString("en-IN")}</div>
+      </div>
+      <div class="summary">📦 <strong>Pickup:</strong> ${pickupAddr}</div>
+      <button onclick="togglePartnerMap('pickup','partnerMap','partnerMapBtn')" id="partnerMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Pickup Route</button>
+      <div id="partnerMap" class="map-box" style="display:none;margin-top:8px;"></div>
+      <button onclick="partnerConfirmPickup('${orderId}','${deliveryAddr.replace(/'/g,"\\'")}',${fare||0})" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Pickup</button>
+    </div>`;
+}
+
+function togglePartnerMap(mode,mapId,btnId){
+  const el=document.getElementById(mapId),btn=document.getElementById(btnId);
+  if(!el||!btn) return;
+  if(el.style.display==="none"){
+    el.style.display="block";
+    btn.textContent="🗺️ Hide Map";
+    const destCoord=mode==="pickup"?partnerPickupCoord:partnerDeliveryCoord;
+    const color=mode==="pickup"?"#2563EB":"#16A34A";
+    const destEmoji=mode==="pickup"?"📦":"🏠";
+    const destLabel=mode==="pickup"?"📦 Pickup Here":"🏠 Deliver Here";
+
+    if(!destCoord){
+      el.innerHTML=`<div style="text-align:center;padding:20px;color:#9CA3AF;font-size:13px;">Map not available for this location</div>`;
+      return;
+    }
+
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(pos=>{
+        const you={lat:pos.coords.latitude,lon:pos.coords.longitude};
+        buildMap(mapId,[
+          {lat:you.lat,lon:you.lon,color:"#F59E0B",emoji:"🚗",label:"📍 You"},
+          {lat:destCoord.lat,lon:destCoord.lon,color:mode==="pickup"?"#2563EB":"#16A34A",emoji:destEmoji,label:destLabel}
+        ],[[you.lat,you.lon],[destCoord.lat,destCoord.lon]],color);
+      },()=>{
+        buildMap(mapId,[{lat:destCoord.lat,lon:destCoord.lon,color:mode==="pickup"?"#2563EB":"#16A34A",emoji:destEmoji,label:destLabel}],null,color);
+      });
+    } else {
+      buildMap(mapId,[{lat:destCoord.lat,lon:destCoord.lon,color:mode==="pickup"?"#2563EB":"#16A34A",emoji:destEmoji,label:destLabel}],null,color);
+    }
+  } else {
+    el.style.display="none";
+    btn.textContent=mode==="pickup"?"🗺️ Show Pickup Route":"🗺️ Show Delivery Route";
+  }
+}
+
+async function partnerConfirmPickup(orderId,deliveryAddr,fare){
+  try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"transit"});}catch(e){}
+  const dlPin=extractPin(deliveryAddr);
+  const dl=dlPin?await getPinCoords(dlPin):await geocode(deliveryAddr);
+  partnerDeliveryCoord=dl;
+
+  const partnerEarning=Math.round((fare||0)*0.75);
+  const wrap=$("partnerOrderWrap");
+  if(!wrap) return;
+  wrap.innerHTML=`
+    <div class="form-section" style="margin:16px;">
+      <div class="fs-row"><div class="step-badge">🚚</div><div><div class="fs-title">Pickup Confirmed!</div><div class="fs-sub">Now deliver to destination</div></div></div>
+      <div class="summary">🏠 <strong>Delivery:</strong> ${deliveryAddr}</div>
+      <button onclick="togglePartnerMap('delivery','deliveryMap','deliveryMapBtn')" id="deliveryMapBtn" style="width:100%;padding:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;font-size:13px;font-weight:600;color:#16A34A;cursor:pointer;margin-top:8px;">🗺️ Show Delivery Route</button>
+      <div id="deliveryMap" class="map-box" style="display:none;margin-top:8px;"></div>
+      <div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:14px;margin-top:12px;">
+        <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:6px;">🔐 Ask customer for their delivery code</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Enter the 4-digit code given by the customer to confirm delivery and claim your ₹${partnerEarning.toLocaleString("en-IN")}</div>
+        <input id="deliveryCodeInput" type="tel" maxlength="4" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" placeholder="Enter 4-digit code" style="width:100%;padding:12px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:20px;font-weight:800;text-align:center;letter-spacing:8px;font-family:monospace;"/>
+        <button onclick="verifyDeliveryCode('${orderId}',${fare||0})" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;">✅ Verify & Claim Earning</button>
+      </div>
+    </div>`;
+}
+
+async function verifyDeliveryCode(orderId,fare){
+  const entered=$("deliveryCodeInput")?$("deliveryCodeInput").value.trim():"";
+  if(entered.length!==4){alert("Please enter the 4-digit delivery code.");return;}
+
+  // Fetch the order's delivery code from Supabase
+  try{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&select=delivery_code");
+    if(rows&&rows.length>0){
+      const correctCode=rows[0].delivery_code;
+      if(entered!==String(correctCode)){
+        alert("❌ Wrong code! Please ask the customer for the correct 4-digit code.");
+        return;
+      }
+    }
+  }catch(e){
+    alert("Could not verify code. Check your connection.");
+    return;
+  }
+
+  await partnerConfirmDelivery(orderId,fare);
+}
+
+async function partnerConfirmDelivery(orderId,fare){
+  try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"delivered"});}catch(e){}
+
+  const partnerEarning=Math.round((fare||0)*0.75);
+  const companyEarning=Math.round((fare||0)*0.25);
+
+  partnerData.earnings=(partnerData.earnings||0)+partnerEarning;
+  partnerData.deliveries=(partnerData.deliveries||0)+1;
+  try{localStorage.setItem("shipmate_partner_"+partnerData.phone,JSON.stringify(partnerData));}catch(e){}
+  try{await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone),"PATCH",{
+    earnings:partnerData.earnings,deliveries:partnerData.deliveries
+  });}catch(e){}
+  updateDashStats();
+
+  const wrap=$("partnerOrderWrap");
+  if(wrap) wrap.innerHTML=`
+    <div style="text-align:center;padding:32px 20px;">
+      <div style="font-size:48px">🎉</div>
+      <div style="font-size:20px;font-weight:800;margin-top:12px;">Delivery Complete!</div>
+      <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:14px;margin-top:16px;">
+        <div style="font-size:13px;color:#6B7280;">Your Earning (75%)</div>
+        <div style="font-size:28px;font-weight:800;color:#16A34A;">₹${partnerEarning.toLocaleString("en-IN")}</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">Company share: ₹${companyEarning.toLocaleString("en-IN")}</div>
+      </div>
+      <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
+    </div>`;
+}
+
 </script>
 </body>
 </html>
