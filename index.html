@@ -1239,11 +1239,38 @@ async function submitPartner(){
   showPartnerDashboard();
 }
 
-function showPartnerDashboard(){
+async function showPartnerDashboard(){
   $("partnerRegWrap").style.display="none";
   $("partnerDashWrap").style.display="block";
   if($("dashName")) $("dashName").textContent=partnerData.name.split(" ")[0];
+
+  // Always fetch latest earnings from Supabase
+  try{
+    const rows=await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone)+"&select=earnings,deliveries");
+    if(rows&&rows.length>0){
+      partnerData.earnings=rows[0].earnings||partnerData.earnings||0;
+      partnerData.deliveries=rows[0].deliveries||partnerData.deliveries||0;
+      try{localStorage.setItem("shipmate_partner_"+partnerData.phone,JSON.stringify(partnerData));}catch(e){}
+    }
+  }catch(e){}
+
   updateDashStats();
+
+  // Restore active order if partner refreshed mid-delivery
+  try{
+    const active=localStorage.getItem("shipmate_active_order_"+partnerData.phone);
+    if(active){
+      const o=JSON.parse(active);
+      $("nearbyOrdersList").innerHTML="";
+      if(o.stage==="pickup"){
+        await partnerViewOrder(o.orderId,o.pickupAddr,o.deliveryAddr,o.fare,o.senderName,o.senderPhone,o.receiverName,o.receiverPhone);
+      } else if(o.stage==="delivery"){
+        await partnerConfirmPickup(o.orderId,o.deliveryAddr,o.fare,o.receiverName,o.receiverPhone);
+      }
+      return;
+    }
+  }catch(e){}
+
   loadNearbyOrders();
 }
 
@@ -1336,14 +1363,13 @@ async function fetchAndShowOrders(list){
       <div style="font-size:13px;margin-bottom:8px;">🏠 <strong>Delivery:</strong> ${o.delivery_addr||"—"}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:16px;font-weight:800;color:#16A34A">${o.fare?`₹${parseInt(o.fare).toLocaleString("en-IN")}`:"₹—"}</div>
-        <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0})" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
+        <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0},'${(o.sender||"").replace(/'/g,"\\'")}','${o.sender_phone||""}','${(o.receiver||"").replace(/'/g,"\\'")}','${o.receiver_phone||""}')" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
       </div>
     </div>
   `).join("");
 }
 
-async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare){
-  // Mark order as accepted in Supabase
+async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone){
   try{
     await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{
       status:"accepted",
@@ -1352,9 +1378,15 @@ async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare){
     });
   }catch(e){}
 
-  // Show pickup route
+  // Save active order to localStorage so it survives refresh
+  try{
+    localStorage.setItem("shipmate_active_order_"+partnerData.phone, JSON.stringify({
+      orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone,stage:"pickup"
+    }));
+  }catch(e){}
+
   $("nearbyOrdersList").innerHTML="";
-  await partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare);
+  await partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone);
 }
 
 async function partnerConfirmDelivery(orderId,fare){
@@ -1576,14 +1608,14 @@ function fillAddr(idx,streetId,cityId,stateId,zipId,countryId){
 }
 
 // ── PARTNER ROUTE ──────────────────────────────────────────────────
-async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare){
-  // Use PIN coords for map (more reliable than full address geocoding in India)
+async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone){
   const puPin=extractPin(pickupAddr);
   const dlPin=extractPin(deliveryAddr);
-  const [pu,dl]=await Promise.all([
-    puPin?getPinCoords(puPin):geocode(pickupAddr),
-    dlPin?getPinCoords(dlPin):geocode(deliveryAddr)
-  ]);
+  let pu=null,dl=null;
+  if(puPin) pu=await getPinCoords(puPin);
+  if(!pu) pu=await geocode(pickupAddr);
+  if(dlPin) dl=await getPinCoords(dlPin);
+  if(!dl) dl=await geocode(deliveryAddr);
   partnerPickupCoord=pu;
   partnerDeliveryCoord=dl;
 
@@ -1594,14 +1626,17 @@ async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare){
     <div class="form-section" style="margin:16px;">
       <div class="fs-row"><div class="step-badge">🚗</div><div><div class="fs-title">Your Assignment</div><div class="fs-sub">Order #${orderId}</div></div></div>
       <div style="background:linear-gradient(135deg,#F0FDF4,#DCFCE7);border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;margin-bottom:12px;">
-        <div style="font-size:11px;color:#6B7280;">Your Earning (75%)</div>
+        <div style="font-size:11px;color:#6B7280;">Your Earning</div>
         <div style="font-size:22px;font-weight:800;color:#16A34A;">₹${partnerEarning.toLocaleString("en-IN")}</div>
         <div style="font-size:11px;color:#9CA3AF;">Total fare ₹${parseInt(fare||0).toLocaleString("en-IN")}</div>
       </div>
-      <div class="summary">📦 <strong>Pickup:</strong> ${pickupAddr}</div>
+      <div class="summary">📦 <strong>Pickup:</strong> ${pickupAddr}
+        ${senderName?`<br>👤 <strong>Sender:</strong> ${senderName}`:""}
+        ${senderPhone?`<br>📞 <a href="tel:${senderPhone}" style="color:#2563EB;font-weight:600;">${senderPhone}</a>`:""}
+      </div>
       <button onclick="togglePartnerMap('pickup','partnerMap','partnerMapBtn')" id="partnerMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Pickup Route</button>
       <div id="partnerMap" class="map-box" style="display:none;margin-top:8px;"></div>
-      <button onclick="partnerConfirmPickup('${orderId}','${deliveryAddr.replace(/'/g,"\\'")}',${fare||0})" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Pickup</button>
+      <button onclick="partnerConfirmPickup('${orderId}','${deliveryAddr.replace(/'/g,"\\'")}',${fare||0},'${(receiverName||"").replace(/'/g,"\\'")}','${receiverPhone||""}')" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Pickup</button>
     </div>`;
 }
 
@@ -1640,10 +1675,19 @@ function togglePartnerMap(mode,mapId,btnId){
   }
 }
 
-async function partnerConfirmPickup(orderId,deliveryAddr,fare){
+async function partnerConfirmPickup(orderId,deliveryAddr,fare,receiverName,receiverPhone){
   try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"transit"});}catch(e){}
+
+  // Update active order stage
+  try{
+    const active=JSON.parse(localStorage.getItem("shipmate_active_order_"+partnerData.phone)||"{}");
+    active.stage="delivery";
+    localStorage.setItem("shipmate_active_order_"+partnerData.phone,JSON.stringify(active));
+  }catch(e){}
+
   const dlPin=extractPin(deliveryAddr);
-  const dl=dlPin?await getPinCoords(dlPin):await geocode(deliveryAddr);
+  let dl=dlPin?await getPinCoords(dlPin):null;
+  if(!dl) dl=await geocode(deliveryAddr);
   partnerDeliveryCoord=dl;
 
   const partnerEarning=Math.round((fare||0)*0.75);
@@ -1652,12 +1696,15 @@ async function partnerConfirmPickup(orderId,deliveryAddr,fare){
   wrap.innerHTML=`
     <div class="form-section" style="margin:16px;">
       <div class="fs-row"><div class="step-badge">🚚</div><div><div class="fs-title">Pickup Confirmed!</div><div class="fs-sub">Now deliver to destination</div></div></div>
-      <div class="summary">🏠 <strong>Delivery:</strong> ${deliveryAddr}</div>
+      <div class="summary">🏠 <strong>Delivery:</strong> ${deliveryAddr}
+        ${receiverName?`<br>👤 <strong>Receiver:</strong> ${receiverName}`:""}
+        ${receiverPhone?`<br>📞 <a href="tel:${receiverPhone}" style="color:#2563EB;font-weight:600;">${receiverPhone}</a>`:""}
+      </div>
       <button onclick="togglePartnerMap('delivery','deliveryMap','deliveryMapBtn')" id="deliveryMapBtn" style="width:100%;padding:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;font-size:13px;font-weight:600;color:#16A34A;cursor:pointer;margin-top:8px;">🗺️ Show Delivery Route</button>
       <div id="deliveryMap" class="map-box" style="display:none;margin-top:8px;"></div>
       <div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:14px;margin-top:12px;">
-        <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:6px;">🔐 Ask customer for their delivery code</div>
-        <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Enter the 4-digit code given by the customer to confirm delivery and claim your ₹${partnerEarning.toLocaleString("en-IN")}</div>
+        <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:6px;">🔐 Ask customer for delivery code</div>
+        <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Enter the 4-digit code from the customer to claim your ₹${partnerEarning.toLocaleString("en-IN")}</div>
         <input id="deliveryCodeInput" type="tel" maxlength="4" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" placeholder="Enter 4-digit code" style="width:100%;padding:12px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:20px;font-weight:800;text-align:center;letter-spacing:8px;font-family:monospace;"/>
         <button onclick="verifyDeliveryCode('${orderId}',${fare||0})" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;">✅ Verify & Claim Earning</button>
       </div>
@@ -1689,8 +1736,10 @@ async function verifyDeliveryCode(orderId,fare){
 async function partnerConfirmDelivery(orderId,fare){
   try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"delivered"});}catch(e){}
 
+  // Clear active order
+  try{localStorage.removeItem("shipmate_active_order_"+partnerData.phone);}catch(e){}
+
   const partnerEarning=Math.round((fare||0)*0.75);
-  const companyEarning=Math.round((fare||0)*0.25);
 
   partnerData.earnings=(partnerData.earnings||0)+partnerEarning;
   partnerData.deliveries=(partnerData.deliveries||0)+1;
@@ -1706,9 +1755,8 @@ async function partnerConfirmDelivery(orderId,fare){
       <div style="font-size:48px">🎉</div>
       <div style="font-size:20px;font-weight:800;margin-top:12px;">Delivery Complete!</div>
       <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:14px;margin-top:16px;">
-        <div style="font-size:13px;color:#6B7280;">Your Earning (75%)</div>
+        <div style="font-size:13px;color:#6B7280;">Your Earning</div>
         <div style="font-size:28px;font-weight:800;color:#16A34A;">₹${partnerEarning.toLocaleString("en-IN")}</div>
-        <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">Company share: ₹${companyEarning.toLocaleString("en-IN")}</div>
       </div>
       <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
     </div>`;
