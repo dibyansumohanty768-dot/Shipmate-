@@ -538,7 +538,8 @@ async function checkPhone(){
   userPhone=phone;
 
   const btn=$("ob_step1").querySelector("button");
-  if(btn){btn.disabled=true;btn.textContent="Checking...";}
+if(btn){btn.disabled=true;btn.textContent="Checking...";}
+try{
 
   // 1. Check localStorage first (instant, works everywhere)
   try{
@@ -577,10 +578,13 @@ async function checkPhone(){
     }
   }catch(e){}
 
-  // 3. New user — show details form
   if(btn){btn.disabled=false;btn.textContent="Continue →";}
   $("ob_step1").style.display="none";
   $("ob_step2").style.display="block";
+}catch(e){
+  alert("Error: "+e.message);
+  if(btn){btn.disabled=false;btn.textContent="Continue →";}
+}
 }
 
 async function saveAddress(){
@@ -647,13 +651,13 @@ async function loadProfile(){
   const ordersWrap=$("prof_orders");
   ordersWrap.innerHTML=`<div style="text-align:center;padding:16px 0;font-size:13px;color:#9CA3AF;">Loading orders…</div>`;
 
-  // Fetch from Supabase if logged in
+  let supabaseRows=[];
   if(userPhone){
     try{
       const rows=await sbFetch("/rest/v1/orders?user_phone=eq."+encodeURIComponent(userPhone)+"&select=*&order=created_at.desc&limit=20");
       if(rows&&rows.length>0){
+        supabaseRows=rows;
         rows.forEach(r=>{
-          // Always update status from Supabase (source of truth)
           if(ordersDB[r.tracking_id]){
             ordersDB[r.tracking_id].status=r.status||"pending";
           } else {
@@ -672,7 +676,6 @@ async function loadProfile(){
             };
           }
         });
-        // Save to localStorage
         try{
           const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
           rows.forEach(r=>{if(ordersDB[r.tracking_id]) saved[r.tracking_id]=ordersDB[r.tracking_id];});
@@ -682,13 +685,16 @@ async function loadProfile(){
     }catch(e){}
   }
 
-  const keys=Object.keys(ordersDB).filter(k=>!["SWDEMO1","SWDEMO2"].includes(k));
-  if(!keys.length){
+  // Newest first — use Supabase order, then local-only orders
+  const supabaseKeys=supabaseRows.map(r=>r.tracking_id).filter(k=>ordersDB[k]);
+  const localKeys=Object.keys(ordersDB).filter(k=>!["SWDEMO1","SWDEMO2"].includes(k)&&!supabaseKeys.includes(k));
+  const allKeys=[...supabaseKeys,...localKeys];
+
+  if(!allKeys.length){
     ordersWrap.innerHTML=`<div style="text-align:center;padding:16px 0;font-size:13px;color:#9CA3AF;">No bookings yet. Book your first shipment!</div>`;
     return;
   }
-  // Sort newest first using tracking ID (they're generated sequentially)
-  const sorted=keys.sort((a,b)=>b.localeCompare(a));
+  const sorted=allKeys;
   ordersWrap.innerHTML=sorted.map(k=>{
     const o=ordersDB[k];
     const st={
@@ -1019,7 +1025,7 @@ async function confirmBooking(){
     saved[tid]=ordersDB[tid];
     localStorage.setItem("shipmate_orders_"+userPhone, JSON.stringify(saved));
   }catch(e){}
-
+sendWhatsAppToPartners(pickup_addr, tid);
   closeBooking();
   $("vehicleGrid").style.display="none";
   $("vgridLabel").style.display="none";
@@ -1232,7 +1238,8 @@ async function submitPartner(){
       id_number: aadhaar,
       id_type: "Aadhaar",
       ref_id: refId,
-      status: "active"
+      status: "active",
+     address: userAddr||""
     });
   }catch(e){}
 
@@ -1761,7 +1768,48 @@ async function partnerConfirmDelivery(orderId,fare){
       <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
     </div>`;
 }
+  async function sendWhatsAppToPartners(pickupAddr, trackingId){
+  const pickupPin = extractPin(pickupAddr);
+  if(!pickupPin){ alert("No PIN found"); return; }
 
+  try{
+    const partners = await sbFetch("/rest/v1/partners?select=phone,name,address&status=eq.active");
+    if(!partners||!partners.length) return;
+
+    const nearbyPhones = [];
+    for(const p of partners){
+      if(!p.phone) continue;
+      const partnerPin = extractPin(p.address||"")||p.pin;
+      if(!partnerPin) continue;
+
+      // Just match by PIN code — no GPS needed
+      if(partnerPin === pickupPin){
+        nearbyPhones.push(p.phone);
+      }
+    }
+
+    if(!nearbyPhones.length){
+      console.warn("No partners found for PIN:", pickupPin);
+      return;
+    }
+
+    const msg = `📦 New shipment in your area!\n\n📍 Pickup: ${pickupAddr}\n🔢 ID: ${trackingId}\n\nOpen Shipmate to accept:\nhttps://shipmate-4bd9.onrender.com`;
+
+    await fetch(`${SUPABASE_URL}/functions/v1/notify-partners`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ message: msg, phones: nearbyPhones })
+    });
+
+    console.log("✅ Notified:", nearbyPhones);
+  }catch(e){
+    console.warn("Error:", e.message);
+  }
+}
+  
 </script>
 </body>
 </html>
