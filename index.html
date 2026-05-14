@@ -390,6 +390,7 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div style="font-size:15px;font-weight:800;">📦 Nearby Orders</div>
         <button onclick="loadNearbyOrders()" style="background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#2563EB;cursor:pointer;">🔄 Refresh</button>
+<button onclick="managePartner()" style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#92400E;cursor:pointer;">⚙️ Manage</button>
       </div>
       <div id="nearbyOrdersList">
         <div style="text-align:center;padding:32px 0;color:#9CA3AF;font-size:14px;">
@@ -431,7 +432,7 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
   <div class="track-hero">
     <div class="track-glow"></div>
     <h2>My <span>Profile</span></h2>
-    <p>Your saved details and preferences.</p>
+    <p id="profileWelcome">Your saved details and preferences.</p>
   </div>
   <div class="form-section" style="margin-bottom:14px;">
     <div class="fs-row"><div class="step-badge">📍</div><div><div class="fs-title">Saved Address</div><div class="fs-sub">Used as your default pickup/delivery point</div></div></div>
@@ -638,6 +639,10 @@ function showTab(tab, btn){
 
 // ── PROFILE ───────────────────────────────────────────────────────
 async function loadProfile(){
+  if(currentUser&&currentUser.name){
+    const p=$("profileWelcome");
+    if(p) p.innerHTML=`👋 Hey, <strong style="color:#fff;font-size:16px;">${currentUser.name}</strong>`;
+  }
   if(userAddr && userAddr!=="Your address"){
     const parts=userAddr.split(", ");
     if($("prof_street"))$("prof_street").value=parts[0]||"";
@@ -1309,7 +1314,7 @@ async function fetchAndShowOrders(list){
 
   let orders=[];
   try{
-    orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50");
+    orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50&vehicle=ilike.*"+encodeURIComponent(partnerData.vehicle)+"*");
   }catch(e){
     list.innerHTML=`<div style="text-align:center;padding:24px;color:#EF4444;font-size:13px;">Could not load orders. Check your connection.</div>`;
     return;
@@ -1420,10 +1425,116 @@ async function partnerConfirmDelivery(orderId,fare){
     </div>`;
 }
 
-function resetPartner(){
-  partnerData=null;
-  $("partnerRegWrap").style.display="block";
-  $("partnerDashWrap").style.display="none";
+async function managePartner(){
+  const wrap=$("partnerOrderWrap");
+  if(!wrap) return;
+
+  // Load existing vehicles from partner_vehicles table
+  let existingVehicles=[];
+  try{
+    const rows=await sbFetch("/rest/v1/partner_vehicles?partner_phone=eq."+encodeURIComponent(partnerData.phone)+"&status=eq.active&select=*");
+    if(rows&&rows.length) existingVehicles=rows;
+    else if(partnerData.vehicle&&partnerData.plate){
+      // Seed from registration data if partner_vehicles is empty
+      try{
+        await sbFetch("/rest/v1/partner_vehicles","POST",{
+          partner_phone: partnerData.phone,
+          vehicle: partnerData.vehicle,
+          plate: partnerData.plate,
+          status:"active"
+        });
+        existingVehicles=[{vehicle:partnerData.vehicle,plate:partnerData.plate,id:"seed"}];
+      }catch(e){}
+    }
+  }catch(e){}
+
+  const vehicleRows=existingVehicles.map(v=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:10px;padding:10px 14px;margin-bottom:8px;">
+      <div>
+        <div style="font-size:14px;font-weight:700;">${v.vehicle==="bike"?"🏍️ Bike":v.vehicle==="car"?"🚗 Car":v.vehicle==="small_truck"?"🚐 Small Truck":"🚛 Truck"}</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:2px;">Plate: ${v.plate}</div>
+      </div>
+      <button onclick="delinkVehicle('${v.id}')" style="background:#FEF2F2;color:#991B1B;border:1.5px solid #FECACA;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Delink</button>
+    </div>
+  `).join("")||`<div style="font-size:13px;color:#9CA3AF;text-align:center;padding:8px 0;">No vehicles linked yet.</div>`;
+
+  wrap.innerHTML=`
+    <div class="form-section" style="margin:16px;">
+      <div class="fs-row"><div class="step-badge">⚙️</div><div><div class="fs-title">Manage Partnership</div><div class="fs-sub">Your linked vehicles</div></div></div>
+      
+      <div style="margin-bottom:14px;">${vehicleRows}</div>
+
+      <div style="border-top:1px solid #F3F4F6;padding-top:14px;margin-bottom:4px;">
+        <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px;">➕ Add Another Vehicle</div>
+        <div class="fgroup"><label class="flabel">Vehicle Type *</label>
+          <select class="fselect" id="new_vehicle_type">
+            <option value="">Choose vehicle...</option>
+            <option value="bike">🏍️ Bike</option>
+            <option value="car">🚗 Car</option>
+            <option value="small_truck">🚐 Small Truck</option>
+            <option value="truck">🚛 Truck</option>
+          </select>
+        </div>
+        <div class="fgroup"><label class="flabel">License Plate *</label>
+          <input class="finput" id="new_vehicle_plate" placeholder="e.g. OD05AB1234"/>
+        </div>
+        <button onclick="addVehicle()" class="btn-blue" style="margin-bottom:16px;">Add Vehicle →</button>
+      </div>
+
+      <div style="text-align:center;margin-top:4px;">
+        <button onclick="leaveShipmate()" style="background:none;border:none;font-size:11px;color:#9CA3AF;cursor:pointer;text-decoration:underline;font-family:'Plus Jakarta Sans',sans-serif;">stop being a partner</button>
+      </div>
+      <button onclick="$('partnerOrderWrap').innerHTML='';loadNearbyOrders();" style="width:100%;padding:11px;background:#F3F4F6;color:#374151;border:1.5px solid #E5E7EB;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-top:10px;">← Back to Orders</button>
+    </div>`;
+}
+
+async function addVehicle(){
+  const type=$("new_vehicle_type")?$("new_vehicle_type").value:"";
+  const plate=$("new_vehicle_plate")?$("new_vehicle_plate").value.trim():"";
+  if(!type){alert("Please select a vehicle type.");return;}
+  if(!plate){alert("Please enter the license plate.");return;}
+  try{
+    await sbFetch("/rest/v1/partner_vehicles","POST",{
+      partner_phone: partnerData.phone,
+      vehicle: type,
+      plate: plate,
+      status: "active"
+    });
+    alert("✅ Vehicle added!");
+    managePartner();
+  }catch(e){ alert("Failed to add vehicle. Try again."); }
+}
+
+async function delinkVehicle(vehicleId){
+  if(!confirm("Remove this vehicle from Shipmate?")) return;
+  try{
+    await sbFetch("/rest/v1/partner_vehicles?id=eq."+vehicleId,"PATCH",{status:"inactive"});
+    managePartner();
+  }catch(e){ alert("Failed to delink. Try again."); }
+}
+
+async function updatePartnerVehicle(){
+  const v=$("manage_vehicle")?$("manage_vehicle").value:"";
+  if(!v) return;
+  try{
+    await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone),"PATCH",{vehicle:v});
+    partnerData.vehicle=v;
+    try{localStorage.setItem("shipmate_partner_"+partnerData.phone,JSON.stringify(partnerData));}catch(e){}
+    alert("✅ Vehicle updated to "+v+"!");
+    $("partnerOrderWrap").innerHTML="";
+    loadNearbyOrders();
+  }catch(e){ alert("Failed to update. Try again."); }
+}
+
+async function leaveShipmate(){
+  if(!confirm("Are you sure you want to leave Shipmate?")) return;
+  try{
+    await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(partnerData.phone),"PATCH",{status:"inactive"});
+    try{localStorage.removeItem("shipmate_partner_"+partnerData.phone);}catch(e){}
+    partnerData=null;
+    $("partnerRegWrap").style.display="block";
+    $("partnerDashWrap").style.display="none";
+  }catch(e){ alert("Failed. Try again."); }
 }
 
 
