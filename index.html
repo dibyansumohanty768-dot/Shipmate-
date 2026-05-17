@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Shipmate</title>
@@ -211,6 +213,9 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
   .vgrid{grid-template-columns:1fr;}
   .choices{grid-template-columns:1fr;}
 }
+
+@keyframes slideDown{0%{opacity:0;transform:translateX(-50%) translateY(-30px);}20%{opacity:1;transform:translateX(-50%) translateY(0);}80%{opacity:1;transform:translateX(-50%) translateY(0);}100%{opacity:0;transform:translateX(-50%) translateY(-30px);}}
+.stage-toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#000;color:#fff;border-radius:14px;padding:12px 20px;font-size:13px;font-weight:700;text-align:center;z-index:999;animation:slideDown 3.5s ease forwards;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,0.3);}
 </style>
 </head>
 <body>
@@ -663,27 +668,30 @@ async function loadProfile(){
       if(rows&&rows.length>0){
         supabaseRows=rows;
         rows.forEach(r=>{
-          if(ordersDB[r.tracking_id]){
-            ordersDB[r.tracking_id].status=r.status||"pending";
-          } else {
-            ordersDB[r.tracking_id]={
-              vehicle:r.vehicle,status:r.status||"pending",
-              pickup_addr:r.pickup_addr,delivery_addr:r.delivery_addr,
-              sender:r.sender,receiver:r.receiver,weight:r.weight,
-              notes:r.notes,date:r.preferred_date,fare:r.fare,
-              delivery_code:r.delivery_code,
-              timeline:[
-                {done:true,label:"Order Placed",time:""},
-                {done:r.status!=="pending",label:"Picked Up",time:""},
-                {done:r.status==="transit"||r.status==="delivered",label:"In Transit",time:""},
-                {done:r.status==="delivered",label:"Delivered",time:""},
-              ]
-            };
-          }
+          // Always overwrite fully from Supabase — never use stale localStorage version
+          ordersDB[r.tracking_id]={
+            vehicle:r.vehicle,status:r.status||"pending",
+            pickup_addr:r.pickup_addr,delivery_addr:r.delivery_addr,
+            sender:r.sender,receiver:r.receiver,weight:r.weight,
+            notes:r.notes,date:r.preferred_date,fare:r.fare,
+            created_at:r.created_at||null,
+            delivery_code:r.delivery_code,
+            timeline:[
+              {done:true,label:"Order Placed",time:""},
+              {done:r.status!=="pending",label:"Picked Up",time:""},
+              {done:r.status==="transit"||r.status==="delivered",label:"In Transit",time:""},
+              {done:r.status==="delivered",label:"Delivered",time:""},
+            ]
+          };
         });
         try{
           const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
-          rows.forEach(r=>{if(ordersDB[r.tracking_id]) saved[r.tracking_id]=ordersDB[r.tracking_id];});
+          rows.forEach(r=>{
+            if(ordersDB[r.tracking_id]){
+              // Always overwrite with fresh Supabase data including created_at
+              saved[r.tracking_id]=ordersDB[r.tracking_id];
+            }
+          });
           localStorage.setItem("shipmate_orders_"+userPhone,JSON.stringify(saved));
         }catch(e){}
       }
@@ -691,6 +699,26 @@ async function loadProfile(){
   }
 
   // Newest first — use Supabase order, then local-only orders
+  // Always use Supabase data fresh, clear stale localStorage orders
+  if(supabaseRows.length>0){
+    try{
+      const freshSaved={};
+      supabaseRows.forEach(r=>{
+        if(ordersDB[r.tracking_id]) freshSaved[r.tracking_id]=ordersDB[r.tracking_id];
+      });
+      localStorage.setItem("shipmate_orders_"+userPhone,JSON.stringify(freshSaved));
+    }catch(e){}
+  }
+  // Always use Supabase data fresh, clear stale localStorage orders
+  if(supabaseRows.length>0){
+    try{
+      const freshSaved={};
+      supabaseRows.forEach(r=>{
+        if(ordersDB[r.tracking_id]) freshSaved[r.tracking_id]=ordersDB[r.tracking_id];
+      });
+      localStorage.setItem("shipmate_orders_"+userPhone,JSON.stringify(freshSaved));
+    }catch(e){}
+  }
   const supabaseKeys=supabaseRows.map(r=>r.tracking_id).filter(k=>ordersDB[k]);
   const localKeys=Object.keys(ordersDB).filter(k=>!["SWDEMO1","SWDEMO2"].includes(k)&&!supabaseKeys.includes(k));
   const allKeys=[...supabaseKeys,...localKeys];
@@ -700,6 +728,11 @@ async function loadProfile(){
     return;
   }
   const sorted=allKeys;
+  if(sorted.length>0){
+    const latestKey=sorted[0];
+    const latestOrder=ordersDB[latestKey];
+    if(latestOrder) showStageToast(latestOrder.status, latestKey);
+  }
   ordersWrap.innerHTML=sorted.map(k=>{
     const o=ordersDB[k];
     const st={
@@ -710,19 +743,30 @@ async function loadProfile(){
       delivered:        "🏠 Delivered"
     }[o.status]||"🔍 Looking for a nearby delivery partner";
     const isActive=o.status!=="delivered";
-    return `<div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:12px;padding:12px 14px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#111;">${k}</div>
-          <div style="font-size:12px;color:#6B7280;margin-top:2px;">${o.vehicle||""} · ${o.date||"Today"}${o.fare?` · ₹${parseInt(o.fare).toLocaleString("en-IN")}`:""}</div>
+    return `<div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:16px;padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;">
+          <div style="font-size:15px;font-weight:800;color:#111;letter-spacing:0.5px;">${k}</div>
+          <div style="font-size:12px;font-weight:600;color:#2563EB;margin-top:4px;">${o.vehicle||""}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
+            ${o.fare?`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;color:#16A34A;">₹${parseInt(o.fare).toLocaleString("en-IN")}</div>`:""}
+            <div style="background:#F3F4F6;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:#6B7280;line-height:1.6;">
+              <div>${o.date?new Date(o.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"Today"}</div>
+              <div style="color:#6B7280;">${o.created_at?new Date(o.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"Time not recorded"}</div>
+            </div>
+          </div>
         </div>
-        <div style="font-size:12px;font-weight:600;">${st}</div>
+        <div style="text-align:right;flex-shrink:0;max-width:120px;">
+          <div style="font-size:12px;font-weight:600;">${st}</div>
+        </div>
       </div>
       ${isActive&&o.delivery_code?`
-      <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:8px 12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 14px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:11px;color:#92400E;font-weight:700;">🔐 Delivery Code</div>
-        <div style="font-size:18px;font-weight:900;letter-spacing:6px;font-family:monospace;">${o.delivery_code}</div>
+        <div style="font-size:22px;font-weight:900;letter-spacing:8px;font-family:monospace;">${o.delivery_code}</div>
       </div>`:""}
+      ${o.status==="pending"?`
+      <button onclick="cancelOrder('${k}')" style="width:100%;padding:10px;background:transparent;color:#EF4444;border:1.5px solid #FECACA;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-top:10px;">Cancel Order</button>`:""}
     </div>`;
   }).join("");
 }
@@ -771,7 +815,7 @@ function dots(current,total){
 function renderSheet(step){
   const v=activeVehicle;
   let h=`<div class="sheet-vtag">${v.icon} &nbsp;${v.name} &nbsp;·&nbsp; ${v.price}/start</div>`;
-  h+=dots(step,4);
+  h+=dots(step,3);
 
   if(step===1){
     h+=`
@@ -806,11 +850,7 @@ function renderSheet(step){
       </div>
       <div class="col2">
         <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="otherCity" placeholder="e.g. Mumbai"/></div>
-        <div class="fgroup"><label class="flabel">State *</label><input class="finput" id="otherState" placeholder="e.g. Maharashtra"/></div>
-      </div>
-      <div class="col2">
         <div class="fgroup"><label class="flabel">PIN Code *</label><input class="finput" id="otherZip" placeholder="e.g. 400001" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"/></div>
-        <div class="fgroup"><label class="flabel">Country</label><input class="finput" id="otherCountry" placeholder="e.g. India"/></div>
       </div>
       <div class="fgroup">
         <label class="flabel">${isPickup?"Receiver's Name *":"Sender's Name *"}</label>
@@ -824,36 +864,8 @@ function renderSheet(step){
       <button class="btn-link" onclick="renderSheet(1)">← Go back</button>`;
   }
 
-  if(step===3){
-    const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
-    const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
-    // Try to autofill from currentUser or userPhone
-    const autoName = currentUser?currentUser.name:"";
-    const autoPhone= currentUser?currentUser.phone:(userPhone||"");
-    const autoEmail= currentUser?currentUser.email:"";
-    h+=`
-      <div class="sheet-q">When should we come?</div>
-      <div class="sheet-hint">Pick your preferred date and time.</div>
-      <div class="summary">
-        📦 <strong>Pickup:</strong> ${pickupAddr}<br>
-        🏠 <strong>Delivery:</strong> ${deliveryAddr}
-      </div>
-      <input type="hidden" id="b_name" value="${autoName}"/>
-      <input type="hidden" id="b_phone" value="${autoPhone}"/>
-      <input type="hidden" id="b_email" value="${autoEmail}"/>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">Preferred Date *</label><input class="finput" id="b_date" type="date"/></div>
-        <div class="fgroup"><label class="flabel">Preferred Time</label>
-          <select class="fselect" id="b_time">
-            <option value="">Any time</option><option>Morning (8am–12pm)</option><option>Afternoon (12pm–5pm)</option><option>Evening (5pm–9pm)</option>
-          </select>
-        </div>
-      </div>
-      <button class="btn-blue" onclick="goToStep4()" style="margin-top:4px">Next →</button>
-      <button class="btn-link" onclick="renderSheet(2)">← Go back</button>`;
-  }
 
-  if(step===4){
+  if(step===3){
     const pickupAddr  = bookingMyRole==="pickup"  ? userAddr : bookingOther;
     const deliveryAddr= bookingMyRole==="delivery"? userAddr : bookingOther;
     const paymentLabel= bookingMyRole==="pickup" ? "💵 Cash on Pickup" : "💵 Cash on Delivery";
@@ -875,11 +887,7 @@ function renderSheet(step){
       <div class="fgroup"><label class="flabel">Item Description *</label>
         <textarea class="ftarea" id="b_desc" placeholder="e.g. 1 large sofa, 3 medium boxes, 1 TV (packed)"></textarea>
       </div>
-      <div class="fgroup"><label class="flabel">Quantity / Number of Items</label><input class="finput" id="b_qty" placeholder="e.g. 5 boxes"/></div>
-      <div class="fgroup">
-        <label class="flabel">Special Instructions</label>
-        <textarea class="ftarea" id="b_special" placeholder="e.g. Fragile, keep upright. Ring doorbell twice." style="min-height:56px"></textarea>
-      </div>
+      <div class="fgroup"><label class="flabel">Preferred Date *</label><input class="finput" id="b_date" type="date"/></div>
       <div class="fgroup">
         <label class="flabel">Payment Method</label>
         <div style="background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;color:#111;">${paymentLabel}</div>
@@ -899,13 +907,12 @@ function renderSheet(step){
         🚘 <strong>Vehicle:</strong> ${activeVehicle.icon} ${activeVehicle.name}
       </div>
       <button class="btn-blue" onclick="confirmBooking()" style="margin-top:4px">Confirm Booking →</button>
-      <button class="btn-link" onclick="renderSheet(3)">← Go back</button>`;
+      <button class="btn-link" onclick="renderSheet(2)">← Go back</button>`;
   }
 
   $("bookingSheet").innerHTML=h;
   if(step===2) setTimeout(()=>{const el=$("otherStreet");if(el)el.focus();},50);
-  if(step===4){
-    // Auto calculate fare when step 4 loads
+  if(step===3){
     const pu=bookingMyRole==="pickup"?userAddr:bookingOther;
     const dl=bookingMyRole==="delivery"?userAddr:bookingOther;
     setTimeout(()=>calculateFare(pu,dl,activeVehicle),300);
@@ -930,7 +937,7 @@ function confirmAddr(){
   const city=$("otherCity")?$("otherCity").value.trim():"";
   const state=$("otherState")?$("otherState").value.trim():"";
   const zip=$("otherZip")?$("otherZip").value.trim():"";
-  if(!street||!city||!state||!zip){alert("Please fill in Street, City, State and PIN Code.");return;}
+  if(!street||!city||!zip){alert("Please fill in Street, City and PIN Code.");return;}
   const country=$("otherCountry")?$("otherCountry").value.trim():"";
   bookingOther=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
   bookingDetails.otherName=$("otherName")?$("otherName").value.trim():"";
@@ -938,15 +945,13 @@ function confirmAddr(){
   renderSheet(3);
 }
 
-function goToStep4(){
-  const date=$("b_date")?$("b_date").value:"";
-  if(!date){alert("Please select a preferred date.");return;}
-  bookingDetails.name=currentUser?currentUser.name:($("b_name")?$("b_name").value.trim():"");
-  bookingDetails.phone=currentUser?currentUser.phone:(userPhone||($("b_phone")?$("b_phone").value.trim():""));
-  bookingDetails.email=currentUser?currentUser.email:($("b_email")?$("b_email").value.trim():"");
-  bookingDetails.date=date;
-  bookingDetails.time=$("b_time")?$("b_time").value:"";
-  renderSheet(4);
+function goToStep3(){
+  bookingDetails.name=currentUser?currentUser.name:"";
+  bookingDetails.phone=currentUser?currentUser.phone:(userPhone||"");
+  bookingDetails.email=currentUser?currentUser.email:"";
+  bookingDetails.date=new Date().toISOString().slice(0,10);
+  bookingDetails.time="Any time";
+  renderSheet(3);
 }
 
 async function confirmBooking(){
@@ -1014,6 +1019,7 @@ async function confirmBooking(){
     date:         payload.preferred_date,
     desc:         payload.description,
     fare:         payload.fare,
+    created_at:   payload.created_at,
     delivery_code,
     timeline:[
       {done:true, label:"Order Placed",           time: new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})},
@@ -1312,9 +1318,34 @@ async function loadNearbyOrders(){
 async function fetchAndShowOrders(list){
   list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">🔍 Finding orders near you…</div>`;
 
+  // Get all active vehicles for this partner
+  let allVehicleTypes=[partnerData.vehicle];
+  try{
+    const vrows=await sbFetch("/rest/v1/partner_vehicles?partner_phone=eq."+encodeURIComponent(partnerData.phone)+"&status=eq.active&select=vehicle");
+    if(vrows&&vrows.length){
+      const types=[...new Set(vrows.map(v=>v.vehicle))];
+      if(types.length) allVehicleTypes=types;
+    }
+  }catch(e){}
+
   let orders=[];
   try{
-    orders=await sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50&vehicle=ilike.*"+encodeURIComponent(partnerData.vehicle)+"*");
+    // Fetch orders for each vehicle type and merge
+    const allFetches=await Promise.all(allVehicleTypes.map(vtype=>
+      sbFetch("/rest/v1/orders?status=eq.pending&select=*&order=created_at.desc&limit=50&vehicle=ilike.*"+encodeURIComponent(vtype)+"*")
+      .catch(()=>[])
+    ));
+    // Merge and deduplicate by tracking_id
+    const seen=new Set();
+    allFetches.forEach(rows=>{
+      if(!rows) return;
+      rows.forEach(o=>{
+        if(!seen.has(o.tracking_id)){
+          seen.add(o.tracking_id);
+          orders.push(o);
+        }
+      });
+    });
   }catch(e){
     list.innerHTML=`<div style="text-align:center;padding:24px;color:#EF4444;font-size:13px;">Could not load orders. Check your connection.</div>`;
     return;
@@ -1350,7 +1381,7 @@ async function fetchAndShowOrders(list){
 
   const nearby=withDist
     .filter(o=>o!==null&&o.dist<=5)
-    .sort((a,b)=>a.dist-b.dist);
+    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
 
   if(nearby.length===0){
     list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
@@ -1371,11 +1402,18 @@ async function fetchAndShowOrders(list){
           :`<div style="font-size:12px;color:#2563EB;font-weight:600">📍 ${o.dist} km away</div>`
         }
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <div style="font-size:12px;background:#EFF6FF;color:#2563EB;font-weight:700;padding:4px 10px;border-radius:6px;">${o.vehicle||"—"}</div>
+        <div style="font-size:11px;color:#9CA3AF;">${o.created_at?new Date(o.created_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):""}</div>
+      </div>
       <div style="font-size:13px;margin-bottom:4px;">📦 <strong>Pickup:</strong> ${o.pickup_addr||"—"}</div>
       <div style="font-size:13px;margin-bottom:8px;">🏠 <strong>Delivery:</strong> ${o.delivery_addr||"—"}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:16px;font-weight:800;color:#16A34A">${o.fare?`₹${parseInt(o.fare).toLocaleString("en-IN")}`:"₹—"}</div>
-        <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0},'${(o.sender||"").replace(/'/g,"\\'")}','${o.sender_phone||""}','${(o.receiver||"").replace(/'/g,"\\'")}','${o.receiver_phone||""}')" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
+        <div style="display:flex;gap:8px;">
+          <button onclick="viewOrderDetails('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0},'${(o.sender||"").replace(/'/g,"\\'")}','${o.sender_phone||""}','${(o.receiver||"").replace(/'/g,"\\'")}','${o.receiver_phone||""}','${(o.booker_name||"").replace(/'/g,"\\'")}','${o.booker_phone||""}','${(o.item_type||"").replace(/'/g,"\\'")}','${(o.description||"").replace(/'/g,"\\'")}','${o.weight||""}','${o.payment_method||""}')" style="background:#F3F4F6;color:#374151;border:1.5px solid #E5E7EB;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;">View</button>
+          <button onclick="acceptOrder('${o.tracking_id}','${(o.pickup_addr||"").replace(/'/g,"\\'")}','${(o.delivery_addr||"").replace(/'/g,"\\'")}',${o.fare||0},'${(o.sender||"").replace(/'/g,"\\'")}','${o.sender_phone||""}','${(o.receiver||"").replace(/'/g,"\\'")}','${o.receiver_phone||""}')" style="background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;">Accept →</button>
+        </div>
       </div>
     </div>
   `).join("");
@@ -1586,6 +1624,7 @@ async function getPinCoords(pin){
       }
     }
   }catch(e){}
+  // Fallback: search by PIN on Nominatim
   return null;
 }
 
@@ -1593,13 +1632,29 @@ async function calculateFare(pickupAddr,deliveryAddr,vehicle){
   const fareText=document.getElementById("fareText");
   const fareBreak=document.getElementById("fareBreakdown");
   if(!fareText) return;
-  fareText.textContent="Calculating…";
-
   const base=parseInt(vehicle.price.replace(/[₹,]/g,""));
   const perKm=vehicle.pricePerKm||10;
-
   const puPin=extractPin(pickupAddr);
   const dlPin=extractPin(deliveryAddr);
+
+  // Instant PIN estimate shown immediately
+  if(puPin&&dlPin){
+    const p1=parseInt(puPin),p2=parseInt(dlPin),diff=Math.abs(p1-p2);
+    let distKm=2;
+    if(diff===0) distKm=2;
+    else if(Math.floor(p1/100)===Math.floor(p2/100)) distKm=8;
+    else if(Math.floor(p1/1000)===Math.floor(p2/1000)) distKm=35;
+    else distKm=Math.min(200,Math.round(diff/50)+40);
+    const quickTotal=Math.round(base+(distKm*perKm));
+    fareText.textContent="~₹"+quickTotal.toLocaleString("en-IN");
+    if(fareBreak) fareBreak.textContent=`~${distKm} km estimated`;
+    lastFareData={dist:distKm,total:quickTotal,pu:null,dl:null};
+    return;
+  }
+
+  fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+  if(fareBreak) fareBreak.textContent="Add PIN codes to both addresses for accurate fare";
+  lastFareData={dist:"?",total:base,pu:null,dl:null};
 
   if(!puPin||!dlPin){
     fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
@@ -1609,7 +1664,10 @@ async function calculateFare(pickupAddr,deliveryAddr,vehicle){
   }
 
   // Get coordinates from India Post API
-  const [pu,dl]=await Promise.all([getPinCoords(puPin),getPinCoords(dlPin)]);
+  const [pu,dl]=await Promise.all([
+    Promise.race([getPinCoords(puPin), new Promise(r=>setTimeout(()=>r(null),3000))]),
+    Promise.race([getPinCoords(dlPin), new Promise(r=>setTimeout(()=>r(null),3000))])
+  ]);
 
   if(!pu||!dl){
     // Fallback: estimate from PIN difference
@@ -1822,11 +1880,23 @@ async function partnerConfirmPickup(orderId,deliveryAddr,fare,receiverName,recei
       <div id="deliveryMap" class="map-box" style="display:none;margin-top:8px;"></div>
       <div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:14px;margin-top:12px;">
         <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:6px;">🔐 Ask customer for delivery code</div>
+        <div id="bookerCallBtn" style="margin-bottom:8px;"><a href="tel:${receiverPhone}" style="display:block;background:#FFF;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;color:#92400E;text-decoration:none;">📞 Call Customer: ${receiverPhone||"Loading..."}</a></div>
         <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Enter the 4-digit code from the customer to claim your ₹${partnerEarning.toLocaleString("en-IN")}</div>
         <input id="deliveryCodeInput" type="tel" maxlength="4" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" placeholder="Enter 4-digit code" style="width:100%;padding:12px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:20px;font-weight:800;text-align:center;letter-spacing:8px;font-family:monospace;"/>
         <button onclick="verifyDeliveryCode('${orderId}',${fare||0})" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;">✅ Verify & Claim Earning</button>
       </div>
     </div>`;
+
+  // Fetch booker phone and update call button
+  try{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&select=booker_phone,booker_name");
+    if(rows&&rows.length>0&&rows[0].booker_phone){
+      const bp=rows[0].booker_phone;
+      const bn=rows[0].booker_name||"Customer";
+      const btn=document.getElementById("bookerCallBtn");
+      if(btn) btn.innerHTML=`<a href="tel:${bp}" style="display:block;background:#FFF;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;color:#92400E;text-decoration:none;">📞 Call ${bn}: ${bp}</a>`;
+    }
+  }catch(e){}
 }
 
 async function verifyDeliveryCode(orderId,fare){
@@ -1881,21 +1951,23 @@ async function partnerConfirmDelivery(orderId,fare){
 }
   async function sendWhatsAppToPartners(pickupAddr, trackingId){
   const pickupPin = extractPin(pickupAddr);
-  if(!pickupPin){ alert("No PIN found"); return; }
+  if(!pickupPin){ console.warn("No PIN found in:", pickupAddr); return; }
 
   try{
     const partners = await sbFetch("/rest/v1/partners?select=phone,name,address&status=eq.active");
-    if(!partners||!partners.length) return;
+    if(!partners||!partners.length){ console.warn("No active partners found"); return; }
 
     const nearbyPhones = [];
     for(const p of partners){
       if(!p.phone) continue;
-      const partnerPin = extractPin(p.address||"")||p.pin;
+      const partnerPin = extractPin(p.address||"") || p.pin;
       if(!partnerPin) continue;
-
-      // Just match by PIN code — no GPS needed
       if(partnerPin === pickupPin){
-        nearbyPhones.push(p.phone);
+        // Normalize phone: remove non-digits, add 91 if missing
+        let normalized = p.phone.toString().replace(/\D/g,"");
+        if(normalized.startsWith("0")) normalized = normalized.slice(1);
+        if(!normalized.startsWith("91")) normalized = "91" + normalized;
+        nearbyPhones.push(normalized);
       }
     }
 
@@ -1906,7 +1978,7 @@ async function partnerConfirmDelivery(orderId,fare){
 
     const msg = `📦 New shipment in your area!\n\n📍 Pickup: ${pickupAddr}\n🔢 ID: ${trackingId}\n\nOpen Shipmate to accept:\nhttps://shipmate-4bd9.onrender.com`;
 
-    await fetch(`${SUPABASE_URL}/functions/v1/notify-partners`, {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-partners`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1915,10 +1987,116 @@ async function partnerConfirmDelivery(orderId,fare){
       body: JSON.stringify({ message: msg, phones: nearbyPhones })
     });
 
-    console.log("✅ Notified:", nearbyPhones);
+    const data = await res.json();
+    console.log("✅ WhatsApp result:", data);
+    if(!res.ok) console.error("❌ Edge function failed:", data);
+
   }catch(e){
-    console.warn("Error:", e.message);
+    console.error("❌ sendWhatsApp error:", e.message);
   }
+}
+  function showStageToast(status, trackingId){
+  const toastKey="shipmate_toast_"+trackingId+"_"+status;
+  if(localStorage.getItem(toastKey)) return;
+  localStorage.setItem(toastKey,"1");
+  const messages={
+    pending:   "👀 We're searching for a partner near you!",
+    accepted:  "🙌 A partner has accepted your order!",
+    transit:   "🛵 Your order is on the way!",
+    delivered: "💙 Thanks for trusting Shipmate!",
+  };
+  const msg=messages[status];
+  if(!msg) return;
+  const existing=document.getElementById("stageToast");
+  if(existing) existing.remove();
+  const toast=document.createElement("div");
+  toast.id="stageToast";
+  toast.className="stage-toast";
+  toast.innerHTML=msg;
+  document.body.appendChild(toast);
+  setTimeout(()=>{if(toast.parentNode) toast.remove();},3500);
+}
+function viewOrderDetails(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone,bookerName,bookerPhone,itemType,description,weight,paymentMethod){
+  const existing=document.getElementById("orderDetailModal");
+  if(existing) existing.remove();
+
+  const modal=document.createElement("div");
+  modal.id="orderDetailModal";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px);z-index:600;display:flex;align-items:flex-end;justify-content:center;padding:0;";
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:22px 22px 0 0;padding:24px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto;animation:popIn 0.25s ease both;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-size:16px;font-weight:800;">📦 Order Details</div>
+        <button onclick="document.getElementById('orderDetailModal').remove()" style="background:#F3F4F6;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;">✕ Close</button>
+      </div>
+
+      <div style="background:#F9FAFB;border-radius:12px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:8px;">ORDER ID</div>
+        <div style="font-size:15px;font-weight:800;color:#111;">${orderId}</div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px 12px 0 0;padding:14px;border-bottom:none;">
+          <div style="font-size:11px;font-weight:700;color:#1E40AF;letter-spacing:1px;margin-bottom:10px;">📦 PICKUP</div>
+          <div style="font-size:13px;color:#374151;margin-bottom:6px;">${pickupAddr}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:13px;font-weight:700;color:#111;">${senderName||"—"}</div>
+            ${senderPhone?`<a href="tel:${senderPhone}" style="background:#2563EB;color:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-decoration:none;">📞 Call</a>`:""}
+          </div>
+        </div>
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:0 0 12px 12px;padding:14px;">
+          <div style="font-size:11px;font-weight:700;color:#065F46;letter-spacing:1px;margin-bottom:10px;">🏠 DELIVERY</div>
+          <div style="font-size:13px;color:#374151;margin-bottom:6px;">${deliveryAddr}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="font-size:13px;font-weight:700;color:#111;">${receiverName||"—"}</div>
+            ${receiverPhone?`<a href="tel:${receiverPhone}" style="background:#16A34A;color:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-decoration:none;">📞 Call</a>`:""}
+          </div>
+        </div>
+      </div>
+
+      ${bookerName||bookerPhone?`
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:4px;">🧾 BOOKED BY</div>
+          <div style="font-size:13px;font-weight:700;color:#111;">${bookerName||"—"}</div>
+        </div>
+        ${bookerPhone?`<a href="tel:${bookerPhone}" style="background:#111;color:#fff;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;text-decoration:none;">📞 Call</a>`:""}
+      </div>`:""}
+
+      <div style="background:#F9FAFB;border-radius:12px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:8px;">📋 ITEM DETAILS</div>
+        <div style="font-size:13px;margin-bottom:6px;">🏷️ <strong>Type:</strong> ${itemType||"—"}</div>
+        <div style="font-size:13px;margin-bottom:6px;">📝 <strong>Description:</strong> ${description||"—"}</div>
+        <div style="font-size:13px;">⚖️ <strong>Weight:</strong> ${weight||"—"}</div>
+      </div>
+
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;color:#065F46;letter-spacing:1px;margin-bottom:8px;">💰 FARE & PAYMENT</div>
+        <div style="font-size:22px;font-weight:800;color:#16A34A;">₹${parseInt(fare||0).toLocaleString("en-IN")}</div>
+        <div style="font-size:12px;color:#6B7280;margin-top:4px;">${paymentMethod||"Cash on Delivery"}</div>
+      </div>
+
+      <button onclick="document.getElementById('orderDetailModal').remove();acceptOrder('${orderId}','${pickupAddr.replace(/'/g,"\\'")}','${deliveryAddr.replace(/'/g,"\\'")}',${fare||0},'${senderName.replace(/'/g,"\\'")}','${senderPhone}','${receiverName.replace(/'/g,"\\'")}','${receiverPhone}')" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Accept This Order →</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click",e=>{if(e.target===modal) modal.remove();});
+}
+async function cancelOrder(trackingId){
+  if(!confirm("Cancel this order?")) return;
+  try{
+    await sbFetch("/rest/v1/orders?tracking_id=eq."+encodeURIComponent(trackingId),"DELETE");
+  }catch(e){
+    alert("Failed to cancel. Try again.");
+    return;
+  }
+  // Remove from local ordersDB and localStorage
+  delete ordersDB[trackingId];
+  try{
+    const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
+    delete saved[trackingId];
+    localStorage.setItem("shipmate_orders_"+userPhone,JSON.stringify(saved));
+  }catch(e){}
+  loadProfile();
 }
   
 </script>
