@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Shipmate</title>
@@ -13,7 +15,7 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
 
 /* ── MAP ── */
 .map-box{width:100%;height:220px;border-radius:12px;overflow:hidden;margin-top:12px;border:1.5px solid #E5E7EB;}
-.map-box-track{width:100%;height:260px;border-radius:12px;overflow:hidden;margin-top:14px;border:1.5px solid #E5E7EB;}
+.map-box-track{width:100%;height:260px;border-radius:12px;overflow:hidden;margin-top:14px;border:1.5px solid #E5E7EB;display:block;}
 .autocomplete-wrap{position:relative;}
 .autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #E5E7EB;border-radius:10px;z-index:999;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,0.10);}
 .autocomplete-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #F3F4F6;}
@@ -307,11 +309,6 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
     <p id="successMsg"></p>
     <div class="track-box" id="trackId"></div>
     <p class="track-note">Use this Tracking ID to follow your shipment</p>
-    <div id="deliveryCodeBox" style="display:none;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:16px;margin-top:12px;text-align:center;">
-      <div style="font-size:12px;color:#92400E;font-weight:700;margin-bottom:6px;">🔐 Delivery Confirmation Code</div>
-      <div id="deliveryCodeNum" style="font-size:36px;font-weight:900;letter-spacing:10px;font-family:monospace;color:#111;">----</div>
-      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Share this code with the partner ONLY after receiving your order</div>
-    </div>
     <button onclick="toggleMap('successMap','successMapBtn',initSuccessMap)" id="successMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Route Map</button>
     <div id="successMap" class="map-box" style="display:none;"></div>
     <button class="btn-ghost" style="max-width:260px;margin:16px auto 0" onclick="resetBooking()">← Book Another</button>
@@ -389,7 +386,7 @@ body{background:#F4F5F7;color:#111;font-family:'Plus Jakarta Sans',sans-serif;-w
     <div id="partnerOrderWrap"></div>
 
     <!-- Available Orders -->
-    <div style="padding:16px;">
+    <div style="padding:16px;" id="nearbyOrdersSection">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div style="font-size:15px;font-weight:800;">📦 Nearby Orders</div>
         <button onclick="loadNearbyOrders()" style="background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;color:#2563EB;cursor:pointer;">🔄 Refresh</button>
@@ -485,6 +482,69 @@ const vehicles=[
 // ── SUPABASE CONFIG ── Replace these with your actual project values ──
 const SUPABASE_URL     = "https://zsbzyokhsyrvuwduiifq.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzYnp5b2toc3lydnV3ZHVpaWZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMDI1NDIsImV4cCI6MjA5MjU3ODU0Mn0.J3gPiP_r1k0HZA6zkeHJ854xr5dxU2NVb94y7_bGsFU";
+
+// ── OLA MAPS CONFIG ──
+const OLA_API_KEY = "VrwVQ8H36Uf9XTT8TMWlmX41MsJ7TYLrUy52rfi4";
+
+async function mmiGeocode(addr){
+  try{
+    const r1=await fetch(
+      `https://api.olamaps.io/places/v1/autocomplete?input=${encodeURIComponent(addr)}&api_key=${OLA_API_KEY}`,
+      {headers:{"X-Request-Id":"sm-"+Date.now()}}
+    );
+    const d1=await r1.json();
+    if(d1&&d1.predictions&&d1.predictions.length>0){
+      const placeId=d1.predictions[0].place_id;
+      const r2=await fetch(
+        `https://api.olamaps.io/places/v1/details?place_id=${encodeURIComponent(placeId)}&api_key=${OLA_API_KEY}`,
+        {headers:{"X-Request-Id":"sm-"+Date.now()}}
+      );
+      const d2=await r2.json();
+      if(d2&&d2.result&&d2.result.geometry&&d2.result.geometry.location){
+        const loc=d2.result.geometry.location;
+        const lat=parseFloat(loc.lat),lon=parseFloat(loc.lng);
+        if(lat>6&&lat<37&&lon>68&&lon<98){
+          console.log("Ola coords for '"+addr+"':",lat,lon);
+          return {lat,lon};
+        }
+      }
+    }
+  }catch(e){ console.log("Ola error:",e.message); }
+  try{
+    const res=await fetch(
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(addr)+"&countrycodes=in",
+      {headers:{"Accept-Language":"en"}}
+    );
+    const data=await res.json();
+    if(data&&data.length>0) return {lat:parseFloat(data[0].lat),lon:parseFloat(data[0].lon)};
+  }catch(e){}
+  return null;
+}
+
+async function mmiDistance(pu,dl){
+  // Ola Maps routing first
+  try{
+    const res=await fetch(
+      `https://api.olamaps.io/routing/v1/directions?origin=${pu.lat},${pu.lon}&destination=${dl.lat},${dl.lon}&api_key=${OLA_API_KEY}`,
+      {headers:{"X-Request-Id":"shipmate-"+Date.now()}}
+    );
+    const data=await res.json();
+    if(data&&data.routes&&data.routes[0]&&data.routes[0].legs&&data.routes[0].legs[0]){
+      return parseFloat((data.routes[0].legs[0].distance/1000).toFixed(1));
+    }
+  }catch(e){}
+  // Fallback OSRM
+  try{
+    const res=await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${pu.lon},${pu.lat};${dl.lon},${dl.lat}?overview=false`
+    );
+    const data=await res.json();
+    if(data&&data.routes&&data.routes[0]){
+      return parseFloat((data.routes[0].distance/1000).toFixed(1));
+    }
+  }catch(e){}
+  return null;
+}
 
 // Helper: call Supabase REST API
 async function sbFetch(path, method="GET", body=null){
@@ -672,6 +732,7 @@ async function loadProfile(){
             pickup_addr:r.pickup_addr,delivery_addr:r.delivery_addr,
             sender:r.sender,receiver:r.receiver,weight:r.weight,
             notes:r.notes,date:r.preferred_date,fare:r.fare,
+            item_type:r.item_type,desc:r.description,distance_km:r.distance_km,
             created_at:r.created_at||null,
             delivery_code:r.delivery_code,
             timeline:[
@@ -733,42 +794,36 @@ async function loadProfile(){
   }
   ordersWrap.innerHTML=sorted.map(k=>{
     const o=ordersDB[k];
-    const st={
-      pending:          "🔍 Looking for a nearby delivery partner",
-      accepted:         "✅ Booking Confirmed",
-      transit:          "🚚 In Transit",
-      out_for_delivery: "📦 Picked Up",
-      delivered:        "🏠 Delivered"
-    }[o.status]||"🔍 Looking for a nearby delivery partner";
-    const isActive=o.status!=="delivered";
-    return `<div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:16px;padding:16px;margin-bottom:12px;">
+    const stMap={
+      pending:          {label:"🔍 Searching for partner", color:"#92400E", bg:"#FEF3C7"},
+      accepted:         {label:"✅ Confirmed",              color:"#1E40AF", bg:"#DBEAFE"},
+      transit:          {label:"🚚 In Transit",             color:"#1E40AF", bg:"#DBEAFE"},
+      out_for_delivery: {label:"📦 Picked Up",             color:"#1E40AF", bg:"#DBEAFE"},
+      delivered:        {label:"🏠 Delivered",              color:"#065F46", bg:"#D1FAE5"},
+      cancelled:        {label:"❌ Cancelled",              color:"#991B1B", bg:"#FEE2E2"},
+    };
+    const st=stMap[o.status]||stMap.pending;
+    const borderColor=o.status==="cancelled"?"#FECACA":o.status==="delivered"?"#86EFAC":"#E5E7EB";
+    return `<div style="background:#fff;border:1.5px solid ${borderColor};border-radius:16px;padding:16px;margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="flex:1;">
-          <div style="font-size:15px;font-weight:800;color:#111;letter-spacing:0.5px;">${k}</div>
-          <div style="font-size:12px;font-weight:600;color:#2563EB;margin-top:4px;">${o.vehicle||""}</div>
+          <div style="font-size:13px;font-weight:800;color:#111;letter-spacing:0.5px;">${k}</div>
+          <div style="font-size:11px;font-weight:600;color:#6B7280;margin-top:2px;">${o.vehicle||""}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
-            ${o.fare?`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;color:#16A34A;">₹${parseInt(o.fare).toLocaleString("en-IN")}</div>`:""}
-            <div style="background:#F3F4F6;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:#6B7280;line-height:1.6;">
-              <div>${o.date?new Date(o.date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"Today"}</div>
-              <div style="color:#6B7280;">${o.created_at?new Date(o.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"Time not recorded"}</div>
-            </div>
+            ${o.fare?`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700;color:#16A34A;">₹${parseInt(o.fare).toLocaleString("en-IN")}</div>`:""}
+            <div style="font-size:11px;color:#9CA3AF;">${o.created_at?new Date(o.created_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:true}):"Today"}</div>
           </div>
         </div>
-        <div style="text-align:right;flex-shrink:0;max-width:120px;">
-          <div style="font-size:12px;font-weight:600;">${st}</div>
-        </div>
+        <div style="background:${st.bg};color:${st.color};border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;flex-shrink:0;text-align:center;">${st.label}</div>
       </div>
-      ${isActive&&o.delivery_code?`
-      <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 14px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:11px;color:#92400E;font-weight:700;">🔐 Delivery Code</div>
-        <div style="font-size:22px;font-weight:900;letter-spacing:8px;font-family:monospace;">${o.delivery_code}</div>
-      </div>`:""}
-      ${o.status==="pending"?`
-      <button onclick="cancelOrder('${k}')" style="width:100%;padding:10px;background:transparent;color:#EF4444;border:1.5px solid #FECACA;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;margin-top:10px;">Cancel Order</button>`:""}
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="showOrderDetails('${k}')" style="flex:1;padding:9px;background:#F9FAFB;color:#374151;border:1.5px solid #E5E7EB;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">View Details</button>
+        ${o.status==="pending"?`<button onclick="cancelOrder('${k}')" style="flex:1;padding:9px;background:transparent;color:#EF4444;border:1.5px solid #FECACA;border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:13px;cursor:pointer;">Cancel</button>`:""}
+      </div>
     </div>`;
   }).join("");
 }
-function saveProfile(){
+async function saveProfile(){
   const street=$("prof_street").value.trim();
   const city=$("prof_city").value.trim();
   const state=$("prof_state").value.trim();
@@ -778,6 +833,28 @@ function saveProfile(){
   userAddr=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
   $("heroAddr").textContent=userAddr;
   $("navAddr").textContent="📍 "+city;
+
+  // Update currentUser object
+  if(currentUser){
+    currentUser.street=street;
+    currentUser.city=city;
+    currentUser.state=state;
+    currentUser.pin=zip;
+    currentUser.country=country;
+  }
+
+  // Update localStorage
+  try{
+    localStorage.setItem("shipmate_user_"+userPhone, JSON.stringify(currentUser));
+  }catch(e){}
+
+  // Update Supabase
+  try{
+    await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(userPhone),"PATCH",{
+      street, city, state, pin:zip, country
+    });
+  }catch(e){ console.error("Failed to update address in Supabase:", e); }
+
   $("prof_saved").style.display="block";
   setTimeout(()=>{$("prof_saved").style.display="none";},2500);
 }
@@ -840,16 +917,21 @@ function renderSheet(step){
       <div class="sheet-q">${isPickup?"Where should we deliver it?":"Where should we pick it up from?"}</div>
       <div class="sheet-hint">${isPickup?"Enter the full delivery address.":"Enter the full pickup address."}</div>
       <div class="fgroup">
-        <label class="flabel">Street Address *</label>
+        <label class="flabel">Street / Village *</label>
+        <input class="finput hi" id="otherStreet" placeholder="e.g. Dighalo, Near Temple"/>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">City / Area *</label>
         <div class="autocomplete-wrap">
-          <input class="finput hi" id="otherStreet" placeholder="e.g. 42 Main Street, Apt 3B" oninput="addrAutocomplete(this,'otherCity','otherState','otherZip','otherCountry')"/>
-          <div class="autocomplete-list" id="otherStreet_list" style="display:none"></div>
+          <input class="finput" id="otherCity" placeholder="e.g. Nimapada" oninput="cityAutocomplete(this,'otherStreet','otherZip')"/>
+          <div class="autocomplete-list" id="otherCity_list" style="display:none"></div>
         </div>
       </div>
-      <div class="col2">
-        <div class="fgroup"><label class="flabel">City *</label><input class="finput" id="otherCity" placeholder="e.g. Mumbai"/></div>
-        <div class="fgroup"><label class="flabel">PIN Code *</label><input class="finput" id="otherZip" placeholder="e.g. 400001" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"/></div>
+      <div class="fgroup">
+        <label class="flabel">State *</label>
+        <input class="finput" id="otherState" placeholder="e.g. Odisha"/>
       </div>
+      <div class="fgroup"><label class="flabel">PIN Code *</label><input class="finput" id="otherZip" placeholder="e.g. 400001" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)"/></div>
       <div class="fgroup">
         <label class="flabel">${isPickup?"Receiver's Name *":"Sender's Name *"}</label>
         <input class="finput" id="otherName" placeholder="${isPickup?"Who receives the shipment?":"Who is sending?"}"/>
@@ -932,12 +1014,12 @@ function previewSummary(){
 
 function confirmAddr(){
   const street=$("otherStreet")?$("otherStreet").value.trim():"";
+  const zip=$("otherZip")?$("otherZip").value.trim():"";
+  if(!street||!zip){alert("Please fill in Street, Village/City and PIN Code.");return;}
   const city=$("otherCity")?$("otherCity").value.trim():"";
   const state=$("otherState")?$("otherState").value.trim():"";
-  const zip=$("otherZip")?$("otherZip").value.trim():"";
-  if(!street||!city||!zip){alert("Please fill in Street, City and PIN Code.");return;}
   const country=$("otherCountry")?$("otherCountry").value.trim():"";
-  bookingOther=street+", "+city+", "+state+" "+zip+(country?", "+country:"");
+  bookingOther=street+", "+state+", "+city+" "+zip;
   bookingDetails.otherName=$("otherName")?$("otherName").value.trim():"";
   bookingDetails.otherPhone=$("otherPhone")?$("otherPhone").value.trim():"";
   renderSheet(3);
@@ -968,9 +1050,9 @@ async function confirmBooking(){
     status:       "pending",
     pickup_addr,
     delivery_addr,
-    sender:       bookingMyRole==="pickup"   ? bookingDetails.name : (bookingDetails.otherName||"—"),
+    sender:       bookingMyRole==="pickup"   ? (currentUser?currentUser.name:bookingDetails.name) : (bookingDetails.otherName||"—"),
     receiver:     bookingMyRole==="delivery" ? bookingDetails.name : (bookingDetails.otherName||"—"),
-    sender_phone: bookingMyRole==="pickup"   ? bookingDetails.phone : (bookingDetails.otherPhone||""),
+    sender_phone: bookingMyRole==="pickup"   ? (currentUser?currentUser.phone:bookingDetails.phone) : (bookingDetails.otherPhone||""),
     receiver_phone:bookingMyRole==="delivery"? bookingDetails.phone : (bookingDetails.otherPhone||""),
     booker_name:  bookingDetails.name,
     booker_phone: bookingDetails.phone,
@@ -1101,11 +1183,8 @@ async function trackOrder(){
   // 2. Fall back to local ordersDB (demo orders + same-session bookings)
   if(!order) order=ordersDB[raw]||null;
 
-  if(!order){
-    result.classList.add("hidden");
-    notFound.classList.remove("hidden");
-    return;
-  }
+  result.classList.add("hidden");
+  notFound.classList.add("hidden");
 
   const statusMap={
     pending:          {label:"🔍 Looking for a nearby delivery partner", cls:"ts-pending"},
@@ -1283,6 +1362,8 @@ async function showPartnerDashboard(){
       } else if(o.stage==="delivery"){
         await partnerConfirmPickup(o.orderId,o.deliveryAddr,o.fare,o.receiverName,o.receiverPhone);
       }
+      const ns=document.getElementById("nearbyOrdersSection");
+      if(ns) ns.style.display="none";
       return;
     }
   }catch(e){}
@@ -1417,22 +1498,34 @@ async function fetchAndShowOrders(list){
   `).join("");
 }
 
-async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone){
+  async function acceptOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone){
+  const activeOrder=localStorage.getItem("shipmate_active_order_"+partnerData.phone);
+  if(activeOrder){
+    alert("You already have an active order. Complete it before accepting another.");
+    return;
+  }
   try{
-    await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&status=eq.pending","PATCH",{
       status:"accepted",
       partner_phone: partnerData.phone,
       partner_name: partnerData.name
     });
-  }catch(e){}
-
-  // Save active order to localStorage so it survives refresh
+    if(!rows||!rows.length){
+      alert("Sorry, another partner already accepted this order.");
+      loadNearbyOrders();
+      return;
+    }
+  }catch(e){
+    alert("Failed to accept order. Try again.");
+    return;
+  }
   try{
     localStorage.setItem("shipmate_active_order_"+partnerData.phone, JSON.stringify({
       orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone,stage:"pickup"
     }));
   }catch(e){}
-
+  const ns=document.getElementById("nearbyOrdersSection");
+  if(ns) ns.style.display="none";
   $("nearbyOrdersList").innerHTML="";
   await partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,senderPhone,receiverName,receiverPhone);
 }
@@ -1457,7 +1550,7 @@ async function partnerConfirmDelivery(orderId,fare){
       <div style="font-size:48px">🎉</div>
       <div style="font-size:20px;font-weight:800;margin-top:12px;">Delivery Complete!</div>
       <div style="font-size:14px;color:#6B7280;margin-top:6px;">You earned <strong style="color:#16A34A">₹${parseInt(fare||0).toLocaleString("en-IN")}</strong></div>
-      <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
+      <button onclick="const ns=document.getElementById('nearbyOrdersSection');if(ns)ns.style.display='block';loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
     </div>`;
 }
 
@@ -1610,50 +1703,56 @@ function extractPin(addr){
 
 // Get exact lat/lon from Indian PIN using India Post API direct coordinates
 // Get coords from PIN using India Post API
-async function getPinCoords(pin){
-  try{
-    const res=await fetch("https://api.postalpincode.in/pincode/"+pin);
-    const data=await res.json();
-    if(data&&data[0]&&data[0].Status==="Success"&&data[0].PostOffice){
-      for(const po of data[0].PostOffice){
-        if(po.Latitude&&po.Longitude&&po.Latitude!="NA"&&po.Longitude!="NA"&&parseFloat(po.Latitude)!==0){
-          return {lat:parseFloat(po.Latitude),lon:parseFloat(po.Longitude),name:po.Name};
-        }
+async function getPinCoords(pin, fullAddr){
+  const parts=(fullAddr||"").split(",").map(s=>s.trim()).filter(s=>s&&!/^\d{6}$/.test(s));
+
+  // Try 1: village + taluk + state
+  if(parts.length>=2){
+    try{
+      const q=parts.slice(0,3).join(", ")+", India";
+      const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"en"}});
+      const data=await res.json();
+      if(data&&data[0]){
+        const lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);
+        if(lat>6&&lat<37&&lon>68&&lon<98) return {lat,lon,name:parts[0]};
       }
+    }catch(e){}
+  }
+
+  // Try 2: taluk + state only
+  if(parts.length>=2){
+    try{
+      const q=parts.slice(1,3).join(", ")+", India";
+      const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+encodeURIComponent(q),{headers:{"Accept-Language":"en"}});
+      const data=await res.json();
+      if(data&&data[0]){
+        const lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);
+        if(lat>6&&lat<37&&lon>68&&lon<98) return {lat,lon,name:parts[1]};
+      }
+    }catch(e){}
+  }
+
+  // Try 3: PIN centroid last resort
+  try{
+    const res=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode="+pin+"&countrycodes=in",{headers:{"Accept-Language":"en"}});
+    const data=await res.json();
+    if(data&&data[0]){
+      const lat=parseFloat(data[0].lat),lon=parseFloat(data[0].lon);
+      if(lat>6&&lat<37&&lon>68&&lon<98) return {lat,lon,name:pin};
     }
   }catch(e){}
-  // Fallback: search by PIN on Nominatim
   return null;
 }
-
 async function calculateFare(pickupAddr,deliveryAddr,vehicle){
   const fareText=document.getElementById("fareText");
   const fareBreak=document.getElementById("fareBreakdown");
   if(!fareText) return;
+  fareText.textContent="Calculating…";
   const base=parseInt(vehicle.price.replace(/[₹,]/g,""));
   const perKm=vehicle.pricePerKm||10;
+  const FREE_KM=3;
   const puPin=extractPin(pickupAddr);
   const dlPin=extractPin(deliveryAddr);
-
-  // Instant PIN estimate shown immediately
-  if(puPin&&dlPin){
-    const p1=parseInt(puPin),p2=parseInt(dlPin),diff=Math.abs(p1-p2);
-    let distKm=2;
-    if(diff===0) distKm=2;
-    else if(Math.floor(p1/100)===Math.floor(p2/100)) distKm=8;
-    else if(Math.floor(p1/1000)===Math.floor(p2/1000)) distKm=35;
-    else distKm=Math.min(200,Math.round(diff/50)+40);
-    const quickTotal=Math.round(base+(distKm*perKm));
-    fareText.textContent="~₹"+quickTotal.toLocaleString("en-IN");
-    if(fareBreak) fareBreak.textContent=`~${distKm} km estimated`;
-    lastFareData={dist:distKm,total:quickTotal,pu:null,dl:null};
-    return;
-  }
-
-  fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
-  if(fareBreak) fareBreak.textContent="Add PIN codes to both addresses for accurate fare";
-  lastFareData={dist:"?",total:base,pu:null,dl:null};
-
   if(!puPin||!dlPin){
     fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
     if(fareBreak) fareBreak.textContent="Add PIN codes to both addresses for accurate fare";
@@ -1661,54 +1760,74 @@ async function calculateFare(pickupAddr,deliveryAddr,vehicle){
     return;
   }
 
-  // Get coordinates from India Post API
-  const [pu,dl]=await Promise.all([
-    Promise.race([getPinCoords(puPin), new Promise(r=>setTimeout(()=>r(null),3000))]),
-    Promise.race([getPinCoords(dlPin), new Promise(r=>setTimeout(()=>r(null),3000))])
-  ]);
+  // Try geocoding by PIN code directly — most reliable for India
+  // Always try full address first — most accurate, especially same-PIN routes
+  // Use Ola Maps autocomplete-based geocode for precise village coords
+  const puParts=pickupAddr.split(",");
+  const dlParts=deliveryAddr.split(",");
+  // Try village name alone first — PIN causes Ola to ignore village
+  const puVillage=puParts[0].trim();
+  const dlVillage=dlParts[0].trim();
+  const puState=(puParts[1]||"").trim();
+  const dlState=(dlParts[1]||"").trim();
+  let pu=await mmiGeocode(puVillage+", "+puState+", "+puPin+", India");
+  console.log("PU:", JSON.stringify(pu));
+  if(!pu) pu=await mmiGeocode(puVillage+", "+puState+", India");
+  if(!pu) pu=await mmiGeocode(puPin+", India");
+
+  let dl=await mmiGeocode(dlVillage+", "+dlState+", "+dlPin+", India");
+  console.log("DL:", JSON.stringify(dl));
+  if(!dl) dl=await mmiGeocode(dlVillage+", "+dlState+", India");
+  if(!dl) dl=await mmiGeocode(dlPin+", India");
+
+  console.log("Final PU:", JSON.stringify(pu));
+  console.log("Final DL:", JSON.stringify(dl));
 
   if(!pu||!dl){
-    // Fallback: estimate from PIN difference
-    const p1=parseInt(puPin),p2=parseInt(dlPin),diff=Math.abs(p1-p2);
-    let distKm=2;
-    if(diff===0) distKm=2;
-    else if(Math.floor(p1/100)===Math.floor(p2/100)) distKm=8;
-    else if(Math.floor(p1/1000)===Math.floor(p2/1000)) distKm=35;
-    else if(Math.floor(p1/10000)===Math.floor(p2/10000)) distKm=Math.min(200,Math.round(diff/50)+40);
-    else distKm=Math.min(1500,Math.round(diff/300)+200);
-    const total=Math.round(base+(distKm*perKm));
-    fareText.textContent="~₹"+total.toLocaleString("en-IN");
-    if(fareBreak) fareBreak.textContent=`Base ₹${base} + ~${distKm} km × ₹${perKm}/km (estimated)`;
-    lastFareData={dist:distKm,total,pu:null,dl:null};
+    fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+    if(fareBreak) fareBreak.textContent="Could not calculate distance";
+    lastFareData={dist:"?",total:base,pu:null,dl:null};
     return;
   }
 
-  // Get real road distance from OSRM
-  try{
-    const osrmUrl=`https://router.project-osrm.org/route/v1/driving/${pu.lon},${pu.lat};${dl.lon},${dl.lat}?overview=false`;
-    const osrmRes=await fetch(osrmUrl);
-    const osrmData=await osrmRes.json();
-    if(osrmData&&osrmData.routes&&osrmData.routes.length>0){
-      const distKm=Math.round(osrmData.routes[0].distance/1000);
-      const total=Math.round(base+(distKm*perKm));
-      fareText.textContent="₹"+total.toLocaleString("en-IN");
-      if(fareBreak) fareBreak.textContent=`Base ₹${base} + ${distKm} km × ₹${perKm}/km (${pu.name} → ${dl.name})`;
-      lastFareData={dist:distKm,total,pu,dl};
-      return;
-    }
-  }catch(e){}
+  // Use MapMyIndia routing — most accurate road distance in India
+  let distKm=parseFloat(haversine(pu.lat,pu.lon,dl.lat,dl.lon).toFixed(1));
+  let distLabel="~";
+  // If same PIN and both coords identical, we can't calculate accurately
+  if(distKm<0.5&&puPin===dlPin){
+    fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
+    if(fareBreak) fareBreak.textContent="Both locations in same area — base fare applies";
+    lastFareData={dist:"<3",total:base,pu,dl};
+    return;
+  }
+  const mmiDist=await mmiDistance(pu,dl);
+  console.log("Ola routing result:", mmiDist);
+  if(mmiDist){
+    distKm=mmiDist;
+    distLabel="";
+  } else {
+    // fallback OSRM
+    try{
+      const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${pu.lon},${pu.lat};${dl.lon},${dl.lat}?overview=false`);
+      const d=await r.json();
+      if(d&&d.routes&&d.routes[0]){
+        distKm=parseFloat((d.routes[0].distance/1000).toFixed(1));
+        distLabel="";
+      }
+    }catch(e){}
+  }
 
-  fareText.textContent="₹"+base.toLocaleString("en-IN")+" (base)";
-  if(fareBreak) fareBreak.textContent="Route not available — showing base fare";
-  lastFareData={dist:"?",total:base,pu,dl};
+  const billable=Math.max(0,distKm-FREE_KM);
+  const total=Math.round(base+(billable*perKm));
+  fareText.textContent=distLabel+"₹"+total.toLocaleString("en-IN");
+  if(fareBreak) fareBreak.textContent=`${distLabel}${distKm}km road · Base ₹${base} covers ${FREE_KM}km · +₹${perKm}/km after`;
+  lastFareData={dist:distKm,total,pu,dl};
 }
-
-
 function buildMap(containerId,markers,line,lineColor){
   if(mapInstances[containerId]){mapInstances[containerId].remove();delete mapInstances[containerId];}
   const center=[(markers[0].lat+markers[markers.length-1].lat)/2,(markers[0].lon+markers[markers.length-1].lon)/2];
   const map=L.map(containerId).setView(center,12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap"}).addTo(map);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"© OpenStreetMap contributors",maxZoom:19}).addTo(map);
   markers.forEach(m=>{
     const icon=L.divIcon({html:`<div style="background:${m.color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3)">${m.emoji}</div>`,iconSize:[32,32],iconAnchor:[16,16],className:""});
     L.marker([m.lat,m.lon],{icon}).addTo(map).bindPopup(m.label);
@@ -1743,7 +1862,10 @@ function initSuccessMap(){
 
 // Tracking map
 async function initTrackMap(pickupAddr,deliveryAddr){
-  const [pu,dl]=await Promise.all([geocode(pickupAddr),geocode(deliveryAddr)]);
+  let pu=await mmiGeocode(pickupAddr+", India");
+  let dl=await mmiGeocode(deliveryAddr+", India");
+  if(!pu) pu=await geocode(pickupAddr);
+  if(!dl) dl=await geocode(deliveryAddr);
   if(!pu||!dl) return;
   buildMap("trackMap",[
     {lat:pu.lat,lon:pu.lon,color:"#2563EB",emoji:"📦",label:"📦 Pickup"},
@@ -1786,10 +1908,16 @@ async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,
   const puPin=extractPin(pickupAddr);
   const dlPin=extractPin(deliveryAddr);
   let pu=null,dl=null;
-  if(puPin) pu=await getPinCoords(puPin);
-  if(!pu) pu=await geocode(pickupAddr);
-  if(dlPin) dl=await getPinCoords(dlPin);
-  if(!dl) dl=await geocode(deliveryAddr);
+  const puParts=pickupAddr.split(",");
+  pu=await geocode((puParts[1]||puParts[0]).trim()+", "+(puParts[2]||"").trim()+", India");
+  if(!pu&&puPin) pu=await getPinCoords(puPin);
+  if(!pu&&puPin){const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode="+puPin+"&countrycodes=in",{headers:{"Accept-Language":"en"}});const d=await r.json();if(d&&d[0])pu={lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)};}
+  const dlParts=deliveryAddr.split(",");
+  dl=await geocode((dlParts[1]||dlParts[0]).trim()+", "+(dlParts[2]||"").trim()+", India");
+  if(!dl&&dlPin) dl=await getPinCoords(dlPin);
+  if(!dl&&dlPin){const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&postalcode="+dlPin+"&countrycodes=in",{headers:{"Accept-Language":"en"}});const d=await r.json();if(d&&d[0])dl={lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)};}
+  if(pu&&(pu.lat<6||pu.lat>37||pu.lon<68||pu.lon>98)) pu=null;
+  if(dl&&(dl.lat<6||dl.lat>37||dl.lon<68||dl.lon>98)) dl=null;
   partnerPickupCoord=pu;
   partnerDeliveryCoord=dl;
 
@@ -1808,8 +1936,7 @@ async function partnerViewOrder(orderId,pickupAddr,deliveryAddr,fare,senderName,
         ${senderName?`<br>👤 <strong>Sender:</strong> ${senderName}`:""}
         ${senderPhone?`<br>📞 <a href="tel:${senderPhone}" style="color:#2563EB;font-weight:600;">${senderPhone}</a>`:""}
       </div>
-      <button onclick="togglePartnerMap('pickup','partnerMap','partnerMapBtn')" id="partnerMapBtn" style="width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;">🗺️ Show Pickup Route</button>
-      <div id="partnerMap" class="map-box" style="display:none;margin-top:8px;"></div>
+      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pickupAddr)}" target="_blank" style="display:block;width:100%;padding:10px;background:#F0F4FF;border:1.5px solid #BFDBFE;border-radius:10px;font-size:13px;font-weight:600;color:#2563EB;cursor:pointer;margin-top:8px;text-align:center;text-decoration:none;">🗺️ Open in Google Maps →</a>
       <button onclick="partnerConfirmPickup('${orderId}','${deliveryAddr.replace(/'/g,"\\'")}',${fare||0},'${(receiverName||"").replace(/'/g,"\\'")}','${receiverPhone||""}')" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Pickup</button>
     </div>`;
 }
@@ -1852,7 +1979,6 @@ function togglePartnerMap(mode,mapId,btnId){
 async function partnerConfirmPickup(orderId,deliveryAddr,fare,receiverName,receiverPhone){
   try{await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{status:"transit"});}catch(e){}
 
-  // Update active order stage
   try{
     const active=JSON.parse(localStorage.getItem("shipmate_active_order_"+partnerData.phone)||"{}");
     active.stage="delivery";
@@ -1874,48 +2000,61 @@ async function partnerConfirmPickup(orderId,deliveryAddr,fare,receiverName,recei
         ${receiverName?`<br>👤 <strong>Receiver:</strong> ${receiverName}`:""}
         ${receiverPhone?`<br>📞 <a href="tel:${receiverPhone}" style="color:#2563EB;font-weight:600;">${receiverPhone}</a>`:""}
       </div>
-      <button onclick="togglePartnerMap('delivery','deliveryMap','deliveryMapBtn')" id="deliveryMapBtn" style="width:100%;padding:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;font-size:13px;font-weight:600;color:#16A34A;cursor:pointer;margin-top:8px;">🗺️ Show Delivery Route</button>
-      <div id="deliveryMap" class="map-box" style="display:none;margin-top:8px;"></div>
-      <div style="background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:12px;padding:14px;margin-top:12px;">
-        <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:6px;">🔐 Ask customer for delivery code</div>
-        <div id="bookerCallBtn" style="margin-bottom:8px;"><a href="tel:${receiverPhone}" style="display:block;background:#FFF;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;color:#92400E;text-decoration:none;">📞 Call Customer: ${receiverPhone||"Loading..."}</a></div>
-        <div style="font-size:12px;color:#9CA3AF;margin-bottom:10px;">Enter the 4-digit code from the customer to claim your ₹${partnerEarning.toLocaleString("en-IN")}</div>
-        <input id="deliveryCodeInput" type="tel" maxlength="4" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" placeholder="Enter 4-digit code" style="width:100%;padding:12px;border:1.5px solid #E5E7EB;border-radius:10px;font-size:20px;font-weight:800;text-align:center;letter-spacing:8px;font-family:monospace;"/>
-        <button onclick="verifyDeliveryCode('${orderId}',${fare||0})" style="width:100%;padding:13px;background:#2563EB;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:10px;">✅ Verify & Claim Earning</button>
-      </div>
+      <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(deliveryAddr)}" target="_blank" style="display:block;width:100%;padding:10px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;font-size:13px;font-weight:600;color:#16A34A;cursor:pointer;margin-top:8px;text-align:center;text-decoration:none;">🗺️ Open Delivery in Google Maps →</a>
+      <button onclick="partnerConfirmDelivery('${orderId}',${fare||0})" style="width:100%;padding:13px;background:#16A34A;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;">✅ Confirm Delivery</button>
     </div>`;
-
-  // Fetch booker phone and update call button
-  try{
-    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&select=booker_phone,booker_name");
-    if(rows&&rows.length>0&&rows[0].booker_phone){
-      const bp=rows[0].booker_phone;
-      const bn=rows[0].booker_name||"Customer";
-      const btn=document.getElementById("bookerCallBtn");
-      if(btn) btn.innerHTML=`<a href="tel:${bp}" style="display:block;background:#FFF;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;color:#92400E;text-decoration:none;">📞 Call ${bn}: ${bp}</a>`;
-    }
-  }catch(e){}
 }
 
-async function verifyDeliveryCode(orderId,fare){
-  const entered=$("deliveryCodeInput")?$("deliveryCodeInput").value.trim():"";
-  if(entered.length!==4){alert("Please enter the 4-digit delivery code.");return;}
+async function sendDeliveryOTP(orderId,fare){
+  const btn=document.getElementById("sendOtpBtn");
+  if(btn){btn.disabled=true;btn.textContent="Sending OTP…";}
+  try{
+    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&select=receiver_phone,booker_phone");
+    if(!rows||!rows.length){alert("Could not fetch order details.");return;}
+    const phone=rows[0].receiver_phone||rows[0].booker_phone;
+    if(!phone){alert("No receiver phone found.");return;}
 
-  // Fetch the order's delivery code from Supabase
+    // Generate 4-digit OTP and save to Supabase
+    const otp=Math.floor(1000+Math.random()*9000).toString();
+    await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId,"PATCH",{delivery_code:otp});
+
+    // Send OTP via Fast2SMS
+    const cleanPhone=phone.replace(/^91/,"").replace(/\D/g,"").slice(-10);
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/send-otp`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+SUPABASE_ANON_KEY},
+      body:JSON.stringify({phone:cleanPhone, otp})
+    });
+    const data=await res.json();
+    console.log("OTP result:", JSON.stringify(data));
+    if(data.ok===true){
+      if(btn){btn.textContent="✅ OTP Sent! Ask customer for it";}
+    } else {
+      if(btn){btn.disabled=false;btn.textContent="📲 Resend OTP";}
+      alert("Failed to send OTP. Try again.");
+    }
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent="📲 Resend OTP";}
+    alert("Error: "+e.message);
+  }
+}
+
+async function verifyDeliveryOTP(orderId,fare){
+  const entered=$("deliveryOtpInput")?$("deliveryOtpInput").value.trim():"";
+  if(entered.length!==4){alert("Please enter the 4-digit OTP.");return;}
   try{
     const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&select=delivery_code");
     if(rows&&rows.length>0){
       const correctCode=rows[0].delivery_code;
       if(entered!==String(correctCode)){
-        alert("❌ Wrong code! Please ask the customer for the correct 4-digit code.");
+        alert("❌ Wrong OTP! Ask the customer to check their SMS.");
         return;
       }
     }
   }catch(e){
-    alert("Could not verify code. Check your connection.");
+    alert("Could not verify OTP. Check your connection.");
     return;
   }
-
   await partnerConfirmDelivery(orderId,fare);
 }
 
@@ -1944,7 +2083,7 @@ async function partnerConfirmDelivery(orderId,fare){
         <div style="font-size:13px;color:#6B7280;">Your Earning</div>
         <div style="font-size:28px;font-weight:800;color:#16A34A;">₹${partnerEarning.toLocaleString("en-IN")}</div>
       </div>
-      <button onclick="loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
+      <button onclick="const ns=document.getElementById('nearbyOrdersSection');if(ns)ns.style.display='block';loadNearbyOrders();$('partnerOrderWrap').innerHTML=''" style="margin-top:20px;background:#2563EB;color:#fff;border:none;border-radius:12px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;">Find More Orders →</button>
     </div>`;
 }
   async function sendWhatsAppToPartners(pickupAddr, trackingId){
@@ -1968,7 +2107,6 @@ async function partnerConfirmDelivery(orderId,fare){
         nearbyPhones.push(normalized);
       }
     }
-
     if(!nearbyPhones.length){
       console.warn("No partners found for PIN:", pickupPin);
       return;
@@ -2079,7 +2217,181 @@ function viewOrderDetails(orderId,pickupAddr,deliveryAddr,fare,senderName,sender
   document.body.appendChild(modal);
   modal.addEventListener("click",e=>{if(e.target===modal) modal.remove();});
 }
-async function cancelOrder(trackingId){
+  function skipAutofill(){
+  const list=document.getElementById("otherCity_list");
+  if(list) list.style.display="none";
+  const hint=document.getElementById("streetSkipHint");
+  if(hint) hint.style.display="none";
+  const input=document.getElementById("otherStreet");
+  if(input){input.value="";input.placeholder="Type your address manually";}
+}
+
+async function cityAutocomplete(input,streetId,zipId){
+  const q=input.value.trim();
+  const list=document.getElementById("otherCity_list");
+  if(!list) return;
+  if(q.length<3){list.style.display="none";return;}
+  clearTimeout(autocompleteTimer);
+
+  // Auto-close after 3 seconds of no interaction
+  if(window._autoCloseTimer) clearTimeout(window._autoCloseTimer);
+
+  autocompleteTimer=setTimeout(async()=>{
+    try{
+      const res=await fetch(
+        `https://api.olamaps.io/places/v1/autocomplete?input=${encodeURIComponent(q)}&api_key=${OLA_API_KEY}`,
+        {headers:{"X-Request-Id":"shipmate-"+Date.now()}}
+      );
+      const data=await res.json();
+      if(data&&data.predictions&&data.predictions.length>0){
+        list.innerHTML=data.predictions.map((p,i)=>`
+          <div class="autocomplete-item" onclick="fillOlaAddr('${p.place_id}','otherZip','otherStreet')">${p.description}</div>
+        `).join("");
+        list.style.display="block";
+        // Auto-close after 3 seconds of no touch
+        if(window._autoCloseTimer) clearTimeout(window._autoCloseTimer);
+        window._autoCloseTimer=setTimeout(()=>{list.style.display="none";},5000);
+        return;
+      }
+    }catch(e){}
+    // Fallback Nominatim
+    try{
+      const res=await fetch(
+        "https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&countrycodes=in&q="+encodeURIComponent(q+", India"),
+        {headers:{"Accept-Language":"en"}}
+      );
+      const data=await res.json();
+      if(!data||!data.length){list.style.display="none";return;}
+      list.innerHTML=data.map((d,i)=>`<div class="autocomplete-item" onclick="fillCityAddr(${i},'otherCity_list','otherStreet','otherZip')">${d.display_name}</div>`).join("");
+      list._data=data;
+      list.style.display="block";
+      // Auto-close after 3 seconds
+      if(window._autoCloseTimer) clearTimeout(window._autoCloseTimer);
+      window._autoCloseTimer=setTimeout(()=>{list.style.display="none";},3000);
+    }catch(e){list.style.display="none";}
+  },400);
+}
+
+async function fillOlaAddr(placeId, zipId, streetId){
+  const list=document.getElementById("otherCity_list");
+  if(list) list.style.display="none";
+  const hint=document.getElementById("streetSkipHint");
+  if(hint) hint.style.display="none";
+  try{
+    const res=await fetch(
+      `https://api.olamaps.io/places/v1/details?place_id=${placeId}&api_key=${OLA_API_KEY}`,
+      {headers:{"X-Request-Id":"shipmate-"+Date.now()}}
+    );
+    const data=await res.json();
+    if(data&&data.result){
+      const r=data.result;
+      const cityInput=document.getElementById("otherCity");
+      // Build city string from address components
+      const comps=r.address_components||[];
+      const get=type=>comps.find(c=>c.types&&c.types.includes(type));
+      const city=get("locality")||get("administrative_area_level_3")||get("administrative_area_level_2")||get("sublocality_level_1")||get("sublocality");
+      const state=get("administrative_area_level_1");
+      const pin=get("postal_code");
+
+      // If city not found from components, extract from the place name directly
+      if(cityInput){
+        if(city){
+          cityInput.value=city.long_name;
+        } else {
+          // Fallback: use first part of formatted address before the state
+          const formatted=r.formatted_address||r.name||"";
+          const parts=formatted.split(",").map(s=>s.trim());
+          const stateIdx=parts.findIndex(p=>state&&p.includes(state.long_name));
+          cityInput.value=stateIdx>0?parts[stateIdx-1]:(parts[0]||"");
+        }
+      }
+      const stateEl=document.getElementById("otherState");
+      if(stateEl&&state) stateEl.value=state.long_name;
+      if(pin&&$(zipId)) $(zipId).value=pin.long_name;
+      // Store coords for fare calc
+      if(r.geometry&&r.geometry.location){
+        list._olaCoords={lat:r.geometry.location.lat,lon:r.geometry.location.lng};
+      }
+    }
+  }catch(e){}
+}
+
+function fillCityAddr(idx,listId,streetId,zipId){
+  const list=document.getElementById(listId);
+  if(!list||!list._data) return;
+  const d=list._data[idx],a=d.address||{};
+  const cityInput=document.getElementById("otherCity");
+  const city=a.city||a.town||a.village||a.county||a.municipality||"";
+  const state=a.state||"";
+  if(cityInput) cityInput.value=city;
+  const stateEl2=document.getElementById("otherState");
+  if(stateEl2&&state) stateEl2.value=state;
+  if($(zipId)&&a.postcode) $(zipId).value=a.postcode;
+  // Also fill street hint
+  const streetEl=document.getElementById(streetId);
+  if(streetEl&&!streetEl.value){
+    const road=a.road||a.neighbourhood||a.suburb||"";
+    if(road) streetEl.value=road;
+  }
+  // Store state for booking
+  const stateEl=document.getElementById("otherState");
+  if(stateEl) stateEl.value=state;
+  list.style.display="none";
+}
+function showOrderDetails(trackingId){
+  const o=ordersDB[trackingId];
+  if(!o) return;
+  const existing=document.getElementById("orderDetailModal");
+  if(existing) existing.remove();
+  const stMap={
+    pending:"🔍 Searching for partner",accepted:"✅ Confirmed",
+    transit:"🚚 In Transit",out_for_delivery:"📦 Picked Up",
+    delivered:"🏠 Delivered",cancelled:"❌ Cancelled"
+  };
+  const modal=document.createElement("div");
+  modal.id="orderDetailModal";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px);z-index:600;display:flex;align-items:flex-end;justify-content:center;";
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:22px 22px 0 0;padding:24px;width:100%;max-width:500px;max-height:88vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div>
+          <div style="font-size:16px;font-weight:800;color:#000;">Order Details</div>
+          <div style="font-size:12px;color:#9CA3AF;margin-top:2px;">${trackingId}</div>
+        </div>
+        <button onclick="document.getElementById('orderDetailModal').remove()" style="background:#F3F4F6;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer;">✕</button>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:8px;">STATUS</div>
+      <div style="font-size:14px;font-weight:700;color:#111;margin-bottom:16px;">${stMap[o.status]||"—"}</div>
+
+      <div style="background:#F9FAFB;border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:10px;">📍 ROUTE</div>
+        <div style="font-size:13px;margin-bottom:6px;">📦 <strong>From:</strong> ${o.sender||"—"}<br><span style="color:#6B7280;font-size:12px;margin-left:18px;">${o.pickup_addr||"—"}</span></div>
+        <div style="font-size:13px;">🏠 <strong>To:</strong> ${o.receiver||"—"}<br><span style="color:#6B7280;font-size:12px;margin-left:18px;">${o.delivery_addr||"—"}</span></div>
+      </div>
+
+      <div style="background:#F9FAFB;border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:10px;">📦 ITEM</div>
+        ${o.item_type||o.desc?`<div style="font-size:13px;color:#374151;margin-bottom:4px;">🏷️ ${o.item_type||"—"}</div>`:""}
+        ${o.desc?`<div style="font-size:13px;color:#374151;margin-bottom:4px;">📝 ${o.desc}</div>`:""}
+        ${o.weight?`<div style="font-size:13px;color:#374151;">⚖️ ${o.weight}</div>`:""}
+      </div>
+
+      ${o.fare?`<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:6px;">💰 FARE</div>
+        <div style="font-size:20px;font-weight:800;color:#16A34A;">₹${parseInt(o.fare).toLocaleString("en-IN")}</div>
+        ${o.distance_km?`<div style="font-size:12px;color:#6B7280;margin-top:2px;">${o.distance_km} km</div>`:""}
+      </div>`:""}
+
+      <div style="background:#F9FAFB;border-radius:12px;padding:14px;">
+        <div style="font-size:11px;font-weight:700;color:#9CA3AF;letter-spacing:1px;margin-bottom:6px;">🗓️ BOOKED</div>
+        <div style="font-size:13px;color:#374151;">${o.created_at?new Date(o.created_at).toLocaleString("en-IN",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:true}):"—"}</div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click",e=>{if(e.target===modal)modal.remove();});
+}
+  async function cancelOrder(trackingId){
   if(!confirm("Cancel this order?")) return;
   try{
     await sbFetch("/rest/v1/orders?tracking_id=eq."+encodeURIComponent(trackingId),"DELETE");
@@ -2087,7 +2399,6 @@ async function cancelOrder(trackingId){
     alert("Failed to cancel. Try again.");
     return;
   }
-  // Remove from local ordersDB and localStorage
   delete ordersDB[trackingId];
   try{
     const saved=JSON.parse(localStorage.getItem("shipmate_orders_"+userPhone)||"{}");
@@ -2100,3 +2411,5 @@ async function cancelOrder(trackingId){
 </script>
 </body>
 </html>
+
+  
