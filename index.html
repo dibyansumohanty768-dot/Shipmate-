@@ -846,12 +846,18 @@ async function saveProfile(){
     localStorage.setItem("shipmate_user_"+userPhone, JSON.stringify(currentUser));
   }catch(e){}
 
-  // Update Supabase
+  // Update Supabase users table
   try{
     await sbFetch("/rest/v1/users?phone=eq."+encodeURIComponent(userPhone),"PATCH",{
       street, city, state, pin:zip, country
     });
   }catch(e){ console.error("Failed to update address in Supabase:", e); }
+  // Also update partners table address
+  try{
+    await sbFetch("/rest/v1/partners?phone=eq."+encodeURIComponent(userPhone),"PATCH",{
+      address: userAddr
+    });
+  }catch(e){}
 
   $("prof_saved").style.display="block";
   setTimeout(()=>{$("prof_saved").style.display="none";},2500);
@@ -1503,16 +1509,18 @@ async function fetchAndShowOrders(list){
     return;
   }
   try{
-    const rows=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&status=eq.pending","PATCH",{
-      status:"accepted",
-      partner_phone: partnerData.phone,
-      partner_name: partnerData.name
-    });
-    if(!rows||!rows.length){
+    // First check if order is still pending
+    const check=await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&status=eq.pending&select=tracking_id");
+    if(!check||!check.length){
       alert("Sorry, another partner already accepted this order.");
       loadNearbyOrders();
       return;
     }
+    await sbFetch("/rest/v1/orders?tracking_id=eq."+orderId+"&status=eq.pending","PATCH",{
+      status:"accepted",
+      partner_phone: partnerData.phone,
+      partner_name: partnerData.name
+    });
   }catch(e){
     alert("Failed to accept order. Try again.");
     return;
