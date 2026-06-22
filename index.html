@@ -2438,6 +2438,21 @@ function showOrderDetails(trackingId){
     });
   } catch(e) { console.error("Notify failed:", e); }
 }
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Basic os_v2_app_ijsdbwn465g5lkbmkhh5luuntuvc7lzcjv6u32ul3my5zwezinfgsw4tzy2ndjdxehmrgqkuzh6lskvsgzv3qms24ixqqwmzth6ojzy"
+      },
+      body: JSON.stringify({
+        app_id: "426430d9-bcf7-4dd5-a82c-51cfd5d28d9d",
+        included_segments: ["All"],
+        headings: { en: "📦 New Order Near You!" },
+        contents: { en: "New shipment at " + pickupAddr + ". Open Shipmate to accept!" },
+        url: "https://shipmate-4bd9.onrender.com"
+      })
+    });
+  } catch(e) { console.error("Notify failed:", e); }
+}
 </script>
 </body>
 </html>
