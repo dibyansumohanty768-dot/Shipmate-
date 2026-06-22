@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "426430d9-bcf7-4dd5-a82c-51cfd5d28d9d",
+      notifyButton: { enable: false },
+    });
+    await OneSignal.Slidedown.promptPush();
+  });
+</script>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Shipmate</title>
@@ -1120,7 +1133,7 @@ async function confirmBooking(){
     saved[tid]=ordersDB[tid];
     localStorage.setItem("shipmate_orders_"+userPhone, JSON.stringify(saved));
   }catch(e){}
-sendWhatsAppToPartners(pickup_addr, tid);
+notifyPartners(pickup_addr, tid);
   closeBooking();
   $("vehicleGrid").style.display="none";
   $("vgridLabel").style.display="none";
@@ -2413,7 +2426,24 @@ function showOrderDetails(trackingId){
   }catch(e){}
   loadProfile();
 }
-  
+  async function notifyPartners(pickupAddr, trackingId) {
+  try {
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Basic os_v2_app_ijsdbwn465g5lkbmkhh5luuntuvc7lzcjv6u32ul3my5zwezinfgsw4tzy2ndjdxehmrgqkuzh6lskvsgzv3qms24ixqqwmzth6ojzy"
+      },
+      body: JSON.stringify({
+        app_id: "426430d9-bcf7-4dd5-a82c-51cfd5d28d9d",
+        included_segments: ["All"],
+        headings: { en: "📦 New Order Near You!" },
+        contents: { en: "New shipment at " + pickupAddr + ". Open Shipmate to accept!" },
+        url: "https://shipmate-4bd9.onrender.com"
+      })
+    });
+  } catch(e) { console.error("Notify failed:", e); }
+}
 </script>
 </body>
 </html>
