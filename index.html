@@ -2428,19 +2428,13 @@ function showOrderDetails(trackingId){
 }
   async function notifyPartners(pickupAddr, trackingId) {
   try {
-    await fetch("https://onesignal.com/api/v1/notifications", {
+    await fetch(`${SUPABASE_URL}/functions/v1/notify-partners`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Basic os_v2_app_ijsdbwn465g5lkbmkhh5luuntuvc7lzcjv6u32ul3my5zwezinfgsw4tzy2ndjdxehmrgqkuzh6lskvsgzv3qms24ixqqwmzth6ojzy"
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY
       },
-      body: JSON.stringify({
-        app_id: "426430d9-bcf7-4dd5-a82c-51cfd5d28d9d",
-        included_segments: ["All"],
-        headings: { en: "📦 New Order Near You!" },
-        contents: { en: "New shipment at " + pickupAddr + ". Open Shipmate to accept!" },
-        url: "https://shipmate-4bd9.onrender.com"
-      })
+      body: JSON.stringify({ pickupAddr, trackingId })
     });
   } catch(e) { console.error("Notify failed:", e); }
 }
