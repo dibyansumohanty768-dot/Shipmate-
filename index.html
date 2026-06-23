@@ -1398,10 +1398,31 @@ async function loadNearbyOrders(){
   if(!list) return;
   list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">📍 Getting your location…</div>`;
 
-  navigator.geolocation.getCurrentPosition(async(pos)=>{
-    partnerLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};
-    await fetchAndShowOrders(list);
-  },(err)=>{
+  async function loadNearbyOrders(){
+  const list=$("nearbyOrdersList");
+  if(!list) return;
+  list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">📍 Getting your location…</div>`;
+
+  // Try GPS with short timeout
+  const gpsPromise = new Promise((resolve)=>{
+    navigator.geolocation.getCurrentPosition(
+      (pos)=>resolve({lat:pos.coords.latitude,lon:pos.coords.longitude}),
+      ()=>resolve(null),
+      {timeout:4000, maximumAge:60000}
+    );
+  });
+
+  partnerLocation = await gpsPromise;
+  // GPS failed — use PIN code fallback
+  if(!partnerLocation){
+    const pin=extractPin(userAddr||"");
+    if(pin){
+      const coords=await getPinCoords(pin);
+      if(coords) partnerLocation={lat:coords.lat,lon:coords.lon};
+    }
+  }
+  await fetchAndShowOrders(list);
+}
     list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
       <div style="font-size:36px">📍</div>
       <div style="font-size:15px;font-weight:700;margin-top:10px;">Location Required</div>
