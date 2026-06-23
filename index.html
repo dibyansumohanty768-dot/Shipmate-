@@ -1393,11 +1393,6 @@ function updateDashStats(){
   if($("dashDeliveries")) $("dashDeliveries").textContent=partnerData.deliveries||0;
 }
 
-async function loadNearbyOrders(){
-  const list=$("nearbyOrdersList");
-  if(!list) return;
-  list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">📍 Getting your location…</div>`;
-
   async function loadNearbyOrders(){
   const list=$("nearbyOrdersList");
   if(!list) return;
