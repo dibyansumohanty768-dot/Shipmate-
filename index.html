@@ -1423,14 +1423,6 @@ async function loadNearbyOrders(){
   }
   await fetchAndShowOrders(list);
 }
-    list.innerHTML=`<div style="text-align:center;padding:32px 20px;">
-      <div style="font-size:36px">📍</div>
-      <div style="font-size:15px;font-weight:700;margin-top:10px;">Location Required</div>
-      <div style="font-size:13px;color:#6B7280;margin-top:6px;">Please enable location access to see nearby orders within 5km.</div>
-      <button onclick="loadNearbyOrders()" style="margin-top:16px;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;">Try Again</button>
-    </div>`;
-  });
-}
 
 async function fetchAndShowOrders(list){
   list.innerHTML=`<div style="text-align:center;padding:24px 0;color:#9CA3AF;font-size:14px;">🔍 Finding orders near you…</div>`;
